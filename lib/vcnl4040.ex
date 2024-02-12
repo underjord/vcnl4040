@@ -10,12 +10,13 @@ defmodule Vcnl4040 do
   @expected_device_addr 0x60
   @expected_device_id <<0x86, 0x01>>
   @device_interrupt_register <<0x0B>>
-  @interrupt_pin 3
+  @interrupt_pin 6
 
   @als_value_lux_per_step 0.12
 
-  @ps_low_thresh_value 3000
-  @ps_high_thresh_value 7000
+  @ps_low_thresh_value 3
+  #@ps_low_thresh_value 3000
+  @ps_high_thresh_value 7
 
   @ps_config_register 0x03
   @ps_config_register_2 0x04
@@ -38,8 +39,8 @@ defmodule Vcnl4040 do
     valid?: false,
     bus_ref: nil,
     interrupt_ref: nil,
-    als_value_readings: CircularBuffer.new(@samples),
     sensor_check_timer: nil,
+    als_value_readings: CircularBuffer.new(@samples),
     als_value_filtered: 0,
     log_samples: false
   }
@@ -59,7 +60,10 @@ defmodule Vcnl4040 do
   def init(options) do
     bus_name = Keyword.get(options, :i2c_bus, "i2c-0")
 
+    IO.puts("open i2c")
     {:ok, bus_ref} = I2C.open(bus_name)
+    IO.puts("opened i2c")
+    interrupt = nil
 
     # confirm sensor is present and returns correct device ID
     valid? =
@@ -96,9 +100,12 @@ defmodule Vcnl4040 do
       1::1,
       # reserved
       0::1,
-      # no interrupt configured
-      0::1,
-      0::1
+      # no proximity interrupts
+      #0::1,
+      #0::1
+      # proximity interrupts, both
+      1::1,
+      1::1
     >>
 
     ps_config_2 = <<
@@ -133,11 +140,9 @@ defmodule Vcnl4040 do
       0::1
     >>
 
-    # Set up interrupt pin
-    # {:ok, interrupt} = Circuits.GPIO.open(@interrupt_pin, :input)
-    # :ok = Circuits.GPIO.set_interrupts(interrupt, :both)
 
     if valid? do
+      IO.puts("sensor valid")
       # Configure Prox Sensor Thresholds
       I2C.write!(
         bus_ref,
@@ -154,8 +159,30 @@ defmodule Vcnl4040 do
       I2C.write!(bus_ref, @expected_device_addr, ps_config)
       I2C.write!(bus_ref, @expected_device_addr, ps_config_2)
 
-      # Configure Ambient Light Sensor (Using all default values)
-      I2C.write!(bus_ref, @expected_device_addr, <<@als_config_register, 0x00::little-16>>)
+      # Configure Ambient Light Sensor (Using all default values) NOPE
+      # Enable ALS_INT_EN
+      als_conf =
+        <<@als_config_register, 
+          0::1,
+          0::1,
+          0::1,
+          0::1,
+          0::1,
+          0::1,
+          # Enable Ambient Light Sensor interrupts ALS_INT_EN
+          #1::1,
+          0::1, # disabled
+          0::1,
+          0::1,
+          0::1,
+          0::1,
+          0::1,
+          0::1,
+          0::1,
+          0::1,
+          0::1,
+        >>
+      I2C.write!(bus_ref, @expected_device_addr, als_conf)
       {:ok, _} = :timer.send_interval(@sample_interval, self(), :sample)
 
       # Read initial prox distance, if beyond threshold start the check timer
@@ -167,23 +194,32 @@ defmodule Vcnl4040 do
         else
           nil
         end
+      IO.puts("configured sensor")
+
+      IO.puts("open GPIO")
+      # Set up interrupt pin
+      {:ok, interrupt} = Circuits.GPIO.open(@interrupt_pin, :input, pullmode: :pullup)
+      IO.puts("set interrupt on GPIO")
+      :ok = Circuits.GPIO.set_interrupts(interrupt, :both)
+      IO.puts("GPIO ready")
 
       {:ok,
        %{
          @default_state
          | valid?: true,
            bus_ref: bus_ref,
-           interrupt_ref: nil,
+           interrupt_ref: interrupt,
+           #interrupt_ref: nil,
            sensor_check_timer: check_timer,
            log_samples: Keyword.get(options, :log_samples, false)
        }}
     else
-      {:ok, @default_state}
+      raise :invalid
     end
-  rescue
-    e ->
-      Logger.error("[Vcnl4040] Error during ambient light and proximity sensor init! Not using it. #{inspect(e)}")
-      {:ok, @default_state}
+  # rescue
+  #   e ->
+  #     Logger.error("[Vcnl4040] Error during ambient light and proximity sensor init! Not using it. #{inspect(e)}")
+  #     {:ok, @default_state}
   end
 
   @impl GenServer
@@ -206,6 +242,9 @@ defmodule Vcnl4040 do
       """)
     end
 
+    current_value = get_prox_reading(state.bus_ref)
+    IO.inspect(current_value, label: "sample prox value")
+
     {:noreply,
      %{
        state
@@ -220,12 +259,14 @@ defmodule Vcnl4040 do
     {:noreply, %{state | valid?: false, sensor_check_timer: nil}}
   end
 
-  def handle_info({:circuits_gpio, @interrupt_pin, _timestamp, _value}, %{valid?: true} = state) do
+  def handle_info({:circuits_gpio, @interrupt_pin, _timestamp, value}, %{valid?: true} = state) do
+    IO.inspect(value, label: "GPIO interrupt")
     <<_, _::6, ps_close::1, ps_away::1>> =
       I2C.write_read!(state.bus_ref, @expected_device_addr, <<@device_interrupt_register>>, 2)
 
     # We got an interrupt, so do a quick reading of the actual value
     current_value = get_prox_reading(state.bus_ref)
+    IO.inspect(current_value, label: "prox value")
 
     cond do
       ps_close == 1 ->

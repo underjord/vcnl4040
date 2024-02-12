@@ -22,6 +22,7 @@ defmodule Vcnl4040.MixProject do
   defp deps do
     [
       {:circuits_i2c, "~> 2.0"},
+      {:circuits_gpio, "~> 2.0"},
       {:circular_buffer, "~> 0.4.1"}
     ]
   end

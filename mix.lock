@@ -1,4 +1,5 @@
 %{
+  "circuits_gpio": {:hex, :circuits_gpio, "2.0.2", "84225714b0d698fb8a7dfbbc900bbc1bbf57f4ad14dca3af15174f701a5b9a45", [:make, :mix], [{:elixir_make, "~> 0.6", [hex: :elixir_make, repo: "hexpm", optional: false]}], "hexpm", "697e80b0e7ed4fd14bbab6c7e8b8b68d43f58fc1eff0ee800262c4f9b31f56c6"},
   "circuits_i2c": {:hex, :circuits_i2c, "2.0.3", "937bd39bd849236bf1638cdcedcd45913c0b1145c7c00d23060a02309abee2fe", [:make, :mix], [{:elixir_make, "~> 0.6", [hex: :elixir_make, repo: "hexpm", optional: false]}], "hexpm", "2c69559052cb042f24dc23797dff8659e8a90dede7c2e576a3b7f7c9156ca94d"},
   "circular_buffer": {:hex, :circular_buffer, "0.4.1", "477f370fd8cfe1787b0a1bade6208bbd274b34f1610e41f1180ba756a7679839", [:mix], [], "hexpm", "633ef2e059dde0d7b89bbab13b1da9d04c6685e80e68fbdf41282d4fae746b72"},
   "elixir_make": {:hex, :elixir_make, "0.7.8", "505026f266552ee5aabca0b9f9c229cbb496c689537c9f922f3eb5431157efc7", [:mix], [{:castore, "~> 0.1 or ~> 1.0", [hex: :castore, repo: "hexpm", optional: true]}, {:certifi, "~> 2.0", [hex: :certifi, repo: "hexpm", optional: true]}], "hexpm", "7a71945b913d37ea89b06966e1342c85cfe549b15e6d6d081e8081c493062c07"},
