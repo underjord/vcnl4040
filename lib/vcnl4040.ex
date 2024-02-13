@@ -25,6 +25,8 @@ defmodule Vcnl4040 do
   @ps_data_register 0x08
 
   @als_config_register 0x00
+  @als_low_thresh_register 0x02
+  @als_high_thresh_register 0x01
   @als_data_register 0x09
 
   @sample_interval 1_000
@@ -101,11 +103,11 @@ defmodule Vcnl4040 do
       # reserved
       0::1,
       # no proximity interrupts
-      #0::1,
-      #0::1
+      0::1,
+      0::1
       # proximity interrupts, both
-      1::1,
-      1::1
+      # 1::1,
+      # 1::1
     >>
 
     ps_config_2 = <<
@@ -156,6 +158,18 @@ defmodule Vcnl4040 do
         <<@ps_high_thresh_register, @ps_high_thresh_value::little-16>>
       )
 
+      I2C.write!(
+        bus_ref,
+        @expected_device_addr,
+        <<@als_low_thresh_register, 100::little-16>>
+      )
+
+      I2C.write!(
+        bus_ref,
+        @expected_device_addr,
+        <<@als_high_thresh_register, 300::little-16>>
+      )
+
       I2C.write!(bus_ref, @expected_device_addr, ps_config)
       I2C.write!(bus_ref, @expected_device_addr, ps_config_2)
 
@@ -170,8 +184,8 @@ defmodule Vcnl4040 do
           0::1,
           0::1,
           # Enable Ambient Light Sensor interrupts ALS_INT_EN
-          #1::1,
-          0::1, # disabled
+          1::1,
+          #0::1, # disabled
           0::1,
           0::1,
           0::1,
@@ -183,7 +197,7 @@ defmodule Vcnl4040 do
           0::1,
         >>
       I2C.write!(bus_ref, @expected_device_addr, als_conf)
-      {:ok, _} = :timer.send_interval(@sample_interval, self(), :sample)
+      #{:ok, _} = :timer.send_interval(@sample_interval, self(), :sample)
 
       # Read initial prox distance, if beyond threshold start the check timer
       initial_prox_reading = get_prox_reading(bus_ref)
@@ -260,31 +274,58 @@ defmodule Vcnl4040 do
   end
 
   def handle_info({:circuits_gpio, @interrupt_pin, _timestamp, value}, %{valid?: true} = state) do
-    IO.inspect(value, label: "GPIO interrupt")
-    <<_, _::6, ps_close::1, ps_away::1>> =
-      I2C.write_read!(state.bus_ref, @expected_device_addr, <<@device_interrupt_register>>, 2)
+    IO.inspect(value, label: "interrupt")
+    #<<_, _::6, _::1, _::1>> =
+      _ = I2C.read!(state.bus_ref, @expected_device_addr, @device_interrupt_register)
 
-    # We got an interrupt, so do a quick reading of the actual value
-    current_value = get_prox_reading(state.bus_ref)
-    IO.inspect(current_value, label: "prox value")
+    # # We got an interrupt, so do a quick reading of the actual value
+    # current_value = get_prox_reading(state.bus_ref)
+    # IO.inspect(current_value, label: "prox value")
 
-    cond do
-      ps_close == 1 ->
-        # TODO: removed call to ActivityState.bump/0 for now
-        # More tuning needs to be done around the thresholds for proximity values
-        {:noreply, state}
+    # cond do
+    #   ps_close == 1 ->
+    #     # TODO: removed call to ActivityState.bump/0 for now
+    #     # More tuning needs to be done around the thresholds for proximity values
+    #     {:noreply, state}
 
-      ps_away == 1 and current_value < @ps_low_thresh_value ->
-        if state.sensor_check_timer do
-          _ = Process.cancel_timer(state.sensor_check_timer)
-          :ok
-        end
+    #   ps_away == 1 and current_value < @ps_low_thresh_value ->
+    #     if state.sensor_check_timer do
+    #       _ = Process.cancel_timer(state.sensor_check_timer)
+    #       :ok
+    #     end
 
-        {:noreply, %{state | sensor_check_timer: nil}}
+    #     {:noreply, %{state | sensor_check_timer: nil}}
 
-      true ->
-        {:noreply, state}
+    #   true ->
+    #     {:noreply, state}
+    # end
+    <<raw_als_value::little-16>> =
+      I2C.write_read!(state.bus_ref, @expected_device_addr, <<@als_data_register>>, 2)
+
+    # Scale ALS value using the lux-per-step value
+    lux_als_value = (raw_als_value * @als_value_lux_per_step) |> round()
+    new_readings_als = CircularBuffer.insert(state.als_value_readings, lux_als_value)
+    filtered_als = CircularBuffer.to_list(new_readings_als) |> get_median() |> round()
+    if state.log_samples do
+      Logger.info("""
+      Sample:
+      raw: #{raw_als_value}
+      lux: #{lux_als_value}
+      filtered: #{filtered_als}
+      samples: #{inspect(CircularBuffer.to_list(new_readings_als), charlists: :as_lists)}
+
+      """)
     end
+
+    current_value = get_prox_reading(state.bus_ref)
+    IO.inspect(current_value, label: "interrupt prox value")
+
+    {:noreply,
+     %{
+       state
+       | als_value_filtered: filtered_als,
+         als_value_readings: new_readings_als
+     }}
   end
 
   def handle_info(_message, state), do: {:noreply, state}
