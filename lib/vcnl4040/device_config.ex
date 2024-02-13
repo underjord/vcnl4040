@@ -1,4 +1,4 @@
-defmodule Vcnl4040.Configuration do
+defmodule Vcnl4040.DeviceConfig do
   defstruct registers: %{}
 
   @registers %{
@@ -50,6 +50,17 @@ defmodule Vcnl4040.Configuration do
     :ps_thdl_m,
     :ps_thdh_l,
     :ps_thdh_m
+  ]
+
+  @i2c_registers [
+    :als_conf,
+    :als_thdh_l,
+    :als_thdl_l,
+    :ps_conf1,
+    :ps_conf3,
+    :ps_canc_l,
+    :ps_thdl_l,
+    :ps_thdh_l
   ]
 
   @threshold_registers %{
@@ -231,8 +242,87 @@ defmodule Vcnl4040.Configuration do
 
   alias __MODULE__, as: C
 
+  defguard is_threshold(value) when value <= @threshold_max and value >= @threshold_min
+
+  @doc """
+  Create a new blank DeviceConfig.
+
+  A blank configuration will produce default values when used.
+
+  The defaults for this device include that both the Ambient Light Sensor
+  and the Proximity Sensor are "shut down" aka turned off.
+  """
   def new do
     %C{}
+  end
+
+  @doc """
+  Convenience for starting Ambient Light Sensor functionality.
+
+  No interrupts configured.
+  """
+  def als_for_polling(integration_time_ms \\ 80, persistence_times \\ 1) do
+    new()
+    # integration time, persistence times, no interrupts, turn on
+    |> set!(als_conf(integration_time_ms, persistence_times, false, false))
+  end
+
+  @doc """
+  Convenience for starting Ambient Light Sensor functionality.
+
+  Configures interrupts with thresholds.
+  """
+  def als_with_interrupts(
+        low_threshold,
+        high_threshold,
+        integration_time_ms \\ 80,
+        persistence_times \\ 1
+      )
+      when is_threshold(low_threshold) and is_threshold(high_threshold) do
+    new()
+    # integration time, persistence times, interrupts, turn on
+    |> set!(als_conf(integration_time_ms, persistence_times, true, false))
+    |> set!(als_thdl(low_threshold))
+    |> set!(als_thdh(high_threshold))
+  end
+
+  @doc """
+  Convenience for starting Proximity Sensor without interrupts.
+  """
+  def ps_for_polling(duty_cycle \\ 40, persistance_times \\ 1, integration_time \\ :t1) do
+    new()
+    |> set!(ps_conf1(duty_cycle, persistance_times, integration_time, false))
+    |> set!(ps_conf2(16))
+  end
+
+  @doc """
+  Convenience for starting Proximity Sensor with interrupts.
+  """
+  def ps_with_interrupts(
+        low_threshold,
+        high_threshold,
+        interrupts \\ :both,
+        duty_cycle \\ 40,
+        persistance_times \\ 1,
+        integration_time \\ :t1
+      )
+      when is_threshold(low_threshold) and is_threshold(high_threshold) do
+    new()
+    |> set!(ps_conf1(duty_cycle, persistance_times, integration_time, false))
+    |> set!(ps_conf2(16, interrupts))
+  end
+
+  # TODO: Add convenience for Proximity sensor with Active Force mode, including a trigger function
+
+  @doc """
+  Merges the second configuration onto the first.
+
+  This will override configuration at a sub-register or register level.
+  It can be used to combine your settings for als_conf and ps_conf1 but
+  not two different als_conf registers. The second one will win.
+  """
+  def merge_configs(%C{registers: base} = c, %C{registers: override}) do
+    %C{c | registers: Map.merge(base, override)}
   end
 
   def set!(%C{} = c, {register, value})
@@ -279,6 +369,11 @@ defmodule Vcnl4040.Configuration do
     <<address::8, payload::binary>>
   end
 
+  def get_all_registers_for_i2c(%C{} = c) do
+    @i2c_registers
+    |> Enum.map(&get_register_for_i2c(c, &1))
+  end
+
   @doc """
   Ambient Light Sensor configuration.
 
@@ -305,8 +400,6 @@ defmodule Vcnl4040.Configuration do
   def reserved do
     {:reserved, <<0::8>>}
   end
-
-  defguard is_threshold(value) when value <= @threshold_max and value >= @threshold_min
 
   @doc """
   Sets high threshold for Ambient Light Sensor interrupt.
