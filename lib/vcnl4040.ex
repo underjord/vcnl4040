@@ -15,7 +15,7 @@ defmodule Vcnl4040 do
   @als_value_lux_per_step 0.12
 
   @ps_low_thresh_value 3
-  #@ps_low_thresh_value 3000
+  # @ps_low_thresh_value 3000
   @ps_high_thresh_value 7
 
   @ps_config_register 0x03
@@ -142,7 +142,6 @@ defmodule Vcnl4040 do
       0::1
     >>
 
-
     if valid? do
       IO.puts("sensor valid")
       # Configure Prox Sensor Thresholds
@@ -176,7 +175,8 @@ defmodule Vcnl4040 do
       # Configure Ambient Light Sensor (Using all default values) NOPE
       # Enable ALS_INT_EN
       als_conf =
-        <<@als_config_register, 
+        <<
+          @als_config_register,
           0::1,
           0::1,
           0::1,
@@ -185,7 +185,7 @@ defmodule Vcnl4040 do
           0::1,
           # Enable Ambient Light Sensor interrupts ALS_INT_EN
           1::1,
-          #0::1, # disabled
+          # 0::1, # disabled
           0::1,
           0::1,
           0::1,
@@ -194,10 +194,11 @@ defmodule Vcnl4040 do
           0::1,
           0::1,
           0::1,
-          0::1,
+          0::1
         >>
+
       I2C.write!(bus_ref, @expected_device_addr, als_conf)
-      #{:ok, _} = :timer.send_interval(@sample_interval, self(), :sample)
+      # {:ok, _} = :timer.send_interval(@sample_interval, self(), :sample)
 
       # Read initial prox distance, if beyond threshold start the check timer
       initial_prox_reading = get_prox_reading(bus_ref)
@@ -208,6 +209,7 @@ defmodule Vcnl4040 do
         else
           nil
         end
+
       IO.puts("configured sensor")
 
       IO.puts("open GPIO")
@@ -223,17 +225,18 @@ defmodule Vcnl4040 do
          | valid?: true,
            bus_ref: bus_ref,
            interrupt_ref: interrupt,
-           #interrupt_ref: nil,
+           # interrupt_ref: nil,
            sensor_check_timer: check_timer,
            log_samples: Keyword.get(options, :log_samples, false)
        }}
     else
       raise :invalid
     end
-  # rescue
-  #   e ->
-  #     Logger.error("[Vcnl4040] Error during ambient light and proximity sensor init! Not using it. #{inspect(e)}")
-  #     {:ok, @default_state}
+
+    # rescue
+    #   e ->
+    #     Logger.error("[Vcnl4040] Error during ambient light and proximity sensor init! Not using it. #{inspect(e)}")
+    #     {:ok, @default_state}
   end
 
   @impl GenServer
@@ -245,6 +248,7 @@ defmodule Vcnl4040 do
     lux_als_value = (raw_als_value * @als_value_lux_per_step) |> round()
     new_readings_als = CircularBuffer.insert(state.als_value_readings, lux_als_value)
     filtered_als = CircularBuffer.to_list(new_readings_als) |> get_median() |> round()
+
     if state.log_samples do
       Logger.info("""
       Sample:
@@ -275,8 +279,8 @@ defmodule Vcnl4040 do
 
   def handle_info({:circuits_gpio, @interrupt_pin, _timestamp, value}, %{valid?: true} = state) do
     IO.inspect(value, label: "interrupt")
-    #<<_, _::6, _::1, _::1>> =
-      _ = I2C.read!(state.bus_ref, @expected_device_addr, @device_interrupt_register)
+    # <<_, _::6, _::1, _::1>> =
+    _ = I2C.read!(state.bus_ref, @expected_device_addr, @device_interrupt_register)
 
     # # We got an interrupt, so do a quick reading of the actual value
     # current_value = get_prox_reading(state.bus_ref)
@@ -306,6 +310,7 @@ defmodule Vcnl4040 do
     lux_als_value = (raw_als_value * @als_value_lux_per_step) |> round()
     new_readings_als = CircularBuffer.insert(state.als_value_readings, lux_als_value)
     filtered_als = CircularBuffer.to_list(new_readings_als) |> get_median() |> round()
+
     if state.log_samples do
       Logger.info("""
       Sample:
