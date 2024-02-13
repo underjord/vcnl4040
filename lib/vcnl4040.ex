@@ -230,7 +230,7 @@ defmodule Vcnl4040 do
            log_samples: Keyword.get(options, :log_samples, false)
        }}
     else
-      raise :invalid
+      {:error, :invalid_device}
     end
 
     # rescue

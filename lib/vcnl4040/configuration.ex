@@ -25,7 +25,7 @@ defmodule Vcnl4040.Configuration do
     als_data_m: {0x09, 1},
     white_data_l: {0x0A, 0},
     white_data_m: {0x0A, 1},
-    reserved: {0x0B, 0},
+    reserved_read: {0x0B, 0},
     int_flag: {0x0B, 1},
     id_l: {0x0C, 0},
     id_m: {0x0C, 1}
@@ -54,9 +54,9 @@ defmodule Vcnl4040.Configuration do
 
   @threshold_registers %{
     als_thdh_l: :als_thdh,
-    als_thdh_r: :skip,
+    als_thdh_m: :skip,
     als_thdl_l: :als_thdl,
-    als_thdl_r: :skip,
+    als_thdl_m: :skip,
     ps_canc_l: :ps_canc,
     ps_canc_m: :skip,
     ps_thdl_l: :ps_thdl,
@@ -70,7 +70,7 @@ defmodule Vcnl4040.Configuration do
     :als_thdl,
     :ps_canc,
     :ps_thdl,
-    :ps_thdh,
+    :ps_thdh
   ]
 
   # Only defaults that are not 0x00
@@ -229,41 +229,15 @@ defmodule Vcnl4040.Configuration do
   @threshold_max 65535
   @threshold_min 0
 
-  if Mix.env() == :test do
-    def values do
-        %{
-            als_conf: [@als_it, @als_pers, @als_int_en, @als_sd],
-            reserved: [],
-            als_thdh: [:uint16le],
-            als_thdl: [:uint16le],
-            ps_conf1: [@ps_duty, @ps_pers, @ps_it, @ps_sd],
-            ps_conf2: [@ps_hd, @ps_int],
-            ps_conf3: [@ps_mps, @ps_smart_pers, @ps_af, @ps_trig, @ps_sc_en],
-            ps_ms: [@white_en, @ps_ms, @led_i],
-            ps_canc: [:uint16le],
-            ps_thdh: [:uint16le],
-            ps_thdl: [:uint16le],
-        }
-        # Make them consistently ordered
-        |> Enum.map(fn {field, arg_values} ->
-            {field,
-                case arg_values do
-                    [:uint16le] -> [[@threshold_min, @threshold_max]]
-                    items -> Enum.map(items, &Map.keys/1)
-                end
-            }
-        end)
-    end
-  end
-
-
   alias __MODULE__, as: C
 
   def new do
     %C{}
   end
 
-  def set!(%C{} = c, {register, value}) when (register in @register_labels or register in @threshold_pair_labels) and is_binary(value) do
+  def set!(%C{} = c, {register, value})
+      when (register in @register_labels or register in @threshold_pair_labels) and
+             is_binary(value) do
     case value do
       <<_::16>> ->
         %C{registers: Map.put(c.registers, register, value)}
@@ -273,43 +247,36 @@ defmodule Vcnl4040.Configuration do
     end
   end
 
-  def to_binaries(%C{} = new, old \\ nil) when is_nil(old) or is_map(old) do
-    #if is_nil(old) do
-      # No previous state known, write 
-      @write_registers
-      |> Enum.map(fn register ->
-        case @threshold_registers[register] do
-          # Not a threshold
-          nil ->
-            case new.registers[register] do
-              nil -> <<_::8>> = default(register)
-              <<_::8>> = value -> value
-            end
+  defp register_to_binary(%C{} = c, label) when label in @write_registers do
+    case @threshold_registers[label] do
+      # Not a threshold register (they are a full 16 bit)
+      nil ->
+        regular_register_value(c, label)
 
-          :skip ->
-            # Empty binary, the other part will provide the full 16 bits
-            <<>>
+      :skip ->
+        # Empty binary, the other part will provide the full 16 bits
+        <<>>
 
-          register_key ->
-            IO.inspect(register_key, label: "threshhold")
-            case new.registers[register_key] do
-              # blank 16 bits
-              nil -> <<0::16>>
-              <<_::16>> = value -> value
-            end
-        end
-      end)
-      |> IO.iodata_to_binary()
-    #else
-    #end
+      register_key ->
+        threshold_register_value(c, register_key)
+    end
   end
 
-  defp default(register) do
-    v = case @register_defaults[register] do
-      nil -> <<0::8>>
-      value -> value |> IO.inspect(label: "found default")
-    end
-    IO.inspect(v <> <<0>>)
+  def get_register_for_i2c(%C{} = c, label) when label in @write_registers do
+    {address, _offset} = @registers[label]
+
+    payload =
+      @registers
+      |> Enum.filter(fn {_reg, {addr, _}} ->
+        addr == address
+      end)
+      |> Enum.sort_by(fn {_reg, {_addr, pos}} -> pos end, :asc)
+      |> Enum.map(fn {register, _} ->
+        register_to_binary(c, register)
+      end)
+      |> IO.iodata_to_binary()
+
+    <<address::8, payload::binary>>
   end
 
   @doc """
@@ -325,15 +292,14 @@ defmodule Vcnl4040.Configuration do
         ) :: {:als_conf, binary()}
   def als_conf(als_it \\ 80, als_pers \\ 1, als_int_en \\ false, als_sd \\ true) do
     {:als_conf,
-    <<
-       f(@als_it, als_it) :: bitstring,
-       @reserved_zero :: bitstring,
-       @reserved_zero :: bitstring,
-       f(@als_pers, als_pers) :: bitstring,
-       f(@als_int_en, als_int_en) :: bitstring,
-       f(@als_sd, als_sd) :: bitstring
-    >>
-     }
+     <<
+       f(@als_it, als_it)::bitstring,
+       @reserved_zero::bitstring,
+       @reserved_zero::bitstring,
+       f(@als_pers, als_pers)::bitstring,
+       f(@als_int_en, als_int_en)::bitstring,
+       f(@als_sd, als_sd)::bitstring
+     >>}
   end
 
   def reserved do
@@ -383,7 +349,7 @@ defmodule Vcnl4040.Configuration do
   end
 
   @doc """
-  Proximity sensor configuration, part 1. 
+  Proximity sensor configuration, part 1.
 
   Duty cycle is 1/40, 1/80, 1/160, 1/320.
 
@@ -398,10 +364,10 @@ defmodule Vcnl4040.Configuration do
   def ps_conf1(ps_duty \\ 40, ps_pers \\ 1, ps_it \\ :t1, ps_sd \\ true) do
     {:ps_conf1,
      <<
-       f(@ps_duty, ps_duty) :: bitstring,
-       f(@ps_pers, ps_pers) :: bitstring,
-       f(@ps_it, ps_it) :: bitstring,
-       f(@ps_sd, ps_sd) :: bitstring
+       f(@ps_duty, ps_duty)::bitstring,
+       f(@ps_pers, ps_pers)::bitstring,
+       f(@ps_it, ps_it)::bitstring,
+       f(@ps_sd, ps_sd)::bitstring
      >>}
   end
 
@@ -417,13 +383,13 @@ defmodule Vcnl4040.Configuration do
   def ps_conf2(ps_hd \\ 12, ps_int \\ :disable) do
     {:ps_conf2,
      <<
-       @reserved_zero :: bitstring,
-       @reserved_zero :: bitstring,
-       @reserved_zero :: bitstring,
-       @reserved_zero :: bitstring,
-       f(@ps_hd, ps_hd) :: bitstring,
-       @reserved_zero :: bitstring,
-       f(@ps_int, ps_int) :: bitstring
+       @reserved_zero::bitstring,
+       @reserved_zero::bitstring,
+       @reserved_zero::bitstring,
+       @reserved_zero::bitstring,
+       f(@ps_hd, ps_hd)::bitstring,
+       @reserved_zero::bitstring,
+       f(@ps_int, ps_int)::bitstring
      >>}
   end
 
@@ -448,13 +414,13 @@ defmodule Vcnl4040.Configuration do
       ) do
     {:ps_conf3,
      <<
-       @reserved_zero :: bitstring,
-       f(@ps_mps, ps_mps) :: bitstring,
-       f(@ps_smart_pers, ps_smart_pers) :: bitstring,
-       f(@ps_af, ps_af) :: bitstring,
-       f(@ps_trig, ps_trig) :: bitstring,
-       @reserved_zero :: bitstring,
-       f(@ps_sc_en, ps_sc_en) :: bitstring 
+       @reserved_zero::bitstring,
+       f(@ps_mps, ps_mps)::bitstring,
+       f(@ps_smart_pers, ps_smart_pers)::bitstring,
+       f(@ps_af, ps_af)::bitstring,
+       f(@ps_trig, ps_trig)::bitstring,
+       @reserved_zero::bitstring,
+       f(@ps_sc_en, ps_sc_en)::bitstring
      >>}
   end
 
@@ -473,12 +439,12 @@ defmodule Vcnl4040.Configuration do
   def ps_ms(white_en \\ false, ps_ms \\ :normal, led_i \\ 50) do
     {:ps_ms,
      <<
-       f(@white_en, white_en) :: bitstring,
-       f(@ps_ms, ps_ms) :: bitstring,
-       @reserved_zero :: bitstring,
-       @reserved_zero :: bitstring,
-       @reserved_zero :: bitstring,
-       f(@led_i, led_i) :: bitstring
+       f(@white_en, white_en)::bitstring,
+       f(@ps_ms, ps_ms)::bitstring,
+       @reserved_zero::bitstring,
+       @reserved_zero::bitstring,
+       @reserved_zero::bitstring,
+       f(@led_i, led_i)::bitstring
      >>}
   end
 
@@ -500,5 +466,63 @@ defmodule Vcnl4040.Configuration do
     {:ps_thdl, <<low::little-16>>}
   end
 
+  defp regular_register_value(c, register) do
+    case c.registers[register] do
+      nil -> <<_::8>> = default(register)
+      <<_::8>> = value -> value
+    end
+  end
+
+  defp threshold_register_value(c, register_key) do
+    case c.registers[register_key] do
+      # blank 16 bits
+      nil -> <<0::16>>
+      <<_::16>> = value -> value
+    end
+  end
+
+  defp default(register) do
+    case @register_defaults[register] do
+      nil -> <<0::8>>
+      value -> <<value::8>>
+    end
+  end
+
   defp f(values, key), do: Map.fetch!(values, key)
+
+  # Slight crime, a couple of functions that uses module attributes
+  # and that are really only good if you are doing tests
+  if Mix.env() == :test do
+    def values do
+      %{
+        als_conf: [@als_it, @als_pers, @als_int_en, @als_sd],
+        reserved: [],
+        als_thdh: [:uint16le],
+        als_thdl: [:uint16le],
+        ps_conf1: [@ps_duty, @ps_pers, @ps_it, @ps_sd],
+        ps_conf2: [@ps_hd, @ps_int],
+        ps_conf3: [@ps_mps, @ps_smart_pers, @ps_af, @ps_trig, @ps_sc_en],
+        ps_ms: [@white_en, @ps_ms, @led_i],
+        ps_canc: [:uint16le],
+        ps_thdh: [:uint16le],
+        ps_thdl: [:uint16le]
+      }
+      # Make them consistently ordered
+      |> Enum.map(fn {field, arg_values} ->
+        {field,
+         case arg_values do
+           [:uint16le] -> [[@threshold_min, @threshold_max]]
+           items -> Enum.map(items, &Map.keys/1)
+         end}
+      end)
+    end
+
+    def to_detailed_binaries(%C{} = c) do
+      @write_registers
+      |> Enum.map(fn register ->
+        binary = register_to_binary(c, register)
+        {register, binary}
+      end)
+    end
+  end
 end
