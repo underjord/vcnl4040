@@ -16,7 +16,7 @@ defmodule VCNL4040.MixProject do
       source_url: "https://github.com/underjord/vcnl4040",
       docs: [
         # The main page in the docs
-        main: "README",
+        main: "readme",
         extras: ["README.md"]
       ],
       package: [
