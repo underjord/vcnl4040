@@ -74,7 +74,7 @@ defmodule VCNL4040.DeviceConfigTest do
     DeviceConfig.values()
     |> Enum.reduce(%{}, fn {fun, arg_values}, seen ->
       case arg_values do
-        [{_key, _value}| _] ->
+        [{_key, _value} | _] ->
           # Call this config function with only defaults
           {^fun, <<_bin::binary>>, _cfg} = res = apply(DeviceConfig, fun, [])
           first_cfg = DeviceConfig.set!(blank, res)
@@ -97,23 +97,27 @@ defmodule VCNL4040.DeviceConfigTest do
                 if this_binary == first_binary do
                   IO.puts("#{fun} at field #{key} and value #{arg}")
                 end
+
                 # Never before seen!
                 if not is_nil(seen3[this_binary]) do
                   IO.puts("#{fun} at field #{key} and value #{arg}")
                 end
+
                 assert is_nil(seen3[this_binary])
                 assert this_binary != first_binary
                 Map.put(seen3, this_binary, this_cfg)
               end
             end)
           end)
-      [min, max] when is_integer(min) and is_integer(max) ->
-        # TODO: test uint16le
-        assert true
-        seen
-      [] ->
-        assert true
-        seen
+
+        [min, max] when is_integer(min) and is_integer(max) ->
+          # TODO: test uint16le
+          assert true
+          seen
+
+        [] ->
+          assert true
+          seen
       end
     end)
   end
@@ -143,7 +147,10 @@ defmodule VCNL4040.DeviceConfigTest do
   test "update device config piece by piece" do
     c = DeviceConfig.new()
     assert c.config[:als_conf] == nil
-    assert %DeviceConfig{config: %{als_conf: %{als_it: 320}}} = c = DeviceConfig.update!(c, :als_conf, als_it: 320)
+
+    assert %DeviceConfig{config: %{als_conf: %{als_it: 320}}} =
+             c = DeviceConfig.update!(c, :als_conf, als_it: 320)
+
     assert <<
              # als_conf address
              0x00,

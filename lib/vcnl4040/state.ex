@@ -57,7 +57,7 @@ defmodule VCNL4040.State do
     buffer_size = Keyword.get(options, :buffer_samples, @default_buffer_size)
 
     base_device_config =
-        DeviceConfig.merge_configs(DeviceConfig.als_for_polling(), DeviceConfig.ps_for_polling())
+      DeviceConfig.merge_configs(DeviceConfig.als_for_polling(), DeviceConfig.ps_for_polling())
 
     %S{
       i2c_bus: Keyword.get(options, :i2c_bus, "i2c-0"),
@@ -96,14 +96,15 @@ defmodule VCNL4040.State do
       |> CircularBuffer.to_list()
       |> get_median()
 
-    %S{s |
-      ambient_light: %{
-        a
-        | readings: readings,
-          latest_raw: raw_value,
-          latest_lux: lux_value,
-          latest_filtered: filtered_value
-      }
+    %S{
+      s
+      | ambient_light: %{
+          a
+          | readings: readings,
+            latest_raw: raw_value,
+            latest_lux: lux_value,
+            latest_filtered: filtered_value
+        }
     }
   end
 
@@ -115,13 +116,14 @@ defmodule VCNL4040.State do
       |> CircularBuffer.to_list()
       |> get_median()
 
-    %S{s |
-      proximity: %{
-        p
-        | readings: readings,
-          latest_raw: value,
-          latest_filtered: filtered_value
-      }
+    %S{
+      s
+      | proximity: %{
+          p
+          | readings: readings,
+            latest_raw: value,
+            latest_filtered: filtered_value
+        }
     }
   end
 

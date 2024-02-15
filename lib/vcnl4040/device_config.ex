@@ -264,7 +264,12 @@ defmodule VCNL4040.DeviceConfig do
   def als_for_polling(integration_time_ms \\ 80, persistence_times \\ 1) do
     new()
     # integration time, persistence times, no interrupts, turn on
-    |> update!(:als_conf, als_it: integration_time_ms, als_pers: persistence_times, als_int_en: false, als_sd: false)
+    |> update!(:als_conf,
+      als_it: integration_time_ms,
+      als_pers: persistence_times,
+      als_int_en: false,
+      als_sd: false
+    )
   end
 
   @doc """
@@ -281,7 +286,12 @@ defmodule VCNL4040.DeviceConfig do
       when is_threshold(low_threshold) and is_threshold(high_threshold) do
     new()
     # integration time, persistence times, interrupts, turn on
-    |> update!(:als_conf, als_it: integration_time_ms, als_pers: persistence_times, als_int_en: true, als_sd: false)
+    |> update!(:als_conf,
+      als_it: integration_time_ms,
+      als_pers: persistence_times,
+      als_int_en: true,
+      als_sd: false
+    )
     |> update!(:als_thdl, low_threshold)
     |> set!(als_thdh(high_threshold))
   end
@@ -291,7 +301,14 @@ defmodule VCNL4040.DeviceConfig do
   """
   def ps_for_polling(duty_cycle \\ 40, persistance_times \\ 1, integration_time \\ :t1) do
     new()
-    |> set!(ps_conf1(ps_duty: duty_cycle, ps_pers: persistance_times, ps_it: integration_time, ps_sd: false))
+    |> set!(
+      ps_conf1(
+        ps_duty: duty_cycle,
+        ps_pers: persistance_times,
+        ps_it: integration_time,
+        ps_sd: false
+      )
+    )
     |> set!(ps_conf2(ps_hd: 16))
   end
 
@@ -308,7 +325,14 @@ defmodule VCNL4040.DeviceConfig do
       )
       when is_threshold(low_threshold) and is_threshold(high_threshold) do
     new()
-    |> set!(ps_conf1(ps_duty: duty_cycle, ps_pers: persistance_times, ps_it: integration_time, ps_sd: false))
+    |> set!(
+      ps_conf1(
+        ps_duty: duty_cycle,
+        ps_pers: persistance_times,
+        ps_it: integration_time,
+        ps_sd: false
+      )
+    )
     |> set!(ps_conf2(ps_hd: 16, ps_int: interrupts))
   end
 
@@ -325,19 +349,23 @@ defmodule VCNL4040.DeviceConfig do
     %C{c | registers: Map.merge(base, override)}
   end
 
-  def set!(%C{} = c, {register, <<_::16>> = value, cfg}) when register in @threshold_pair_labels do
+  def set!(%C{} = c, {register, <<_::16>> = value, cfg})
+      when register in @threshold_pair_labels do
     %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
   end
+
   def set!(%C{} = c, {register, <<_::8>> = value, cfg}) when register in @register_labels do
     %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
   end
 
-  def update!(%C{} = c, register, v) when register in @threshold_pair_labels and is_threshold(v) do
+  def update!(%C{} = c, register, v)
+      when register in @threshold_pair_labels and is_threshold(v) do
     {^register, <<_::16>> = value, cfg} = apply(__MODULE__, register, [v, c.config[register]])
     %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
   end
 
-  def update!(%C{} = c, register, kv) when register in @register_labels and (is_map(kv) or is_list(kv)) do
+  def update!(%C{} = c, register, kv)
+      when register in @register_labels and (is_map(kv) or is_list(kv)) do
     {^register, <<_::8>> = value, cfg} = apply(__MODULE__, register, [kv, c.config[register]])
     %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
   end
@@ -390,16 +418,21 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and config map.
   """
-  @spec als_conf(%{
-          als_it: 80 | 160 | 320 | 640,
-          als_pers: 1 | 2 | 4 | 8,
-          als_int_en: boolean(),
-          als_sd: boolean()
-        } | [{atom(), term()}], map() | nil) :: {:als_conf, binary()}
+  @spec als_conf(
+          %{
+            als_it: 80 | 160 | 320 | 640,
+            als_pers: 1 | 2 | 4 | 8,
+            als_int_en: boolean(),
+            als_sd: boolean()
+          }
+          | [{atom(), term()}],
+          map() | nil
+        ) :: {:als_conf, binary()}
   def als_conf(kv \\ [], d \\ nil) do
-    cfg = 
-      d || @default_als_conf
-      |> Map.merge(Map.new(kv))
+    cfg =
+      d ||
+        @default_als_conf
+        |> Map.merge(Map.new(kv))
 
     {:als_conf,
      <<
@@ -469,16 +502,21 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and config map.
   """
-  @spec ps_conf1(%{
-          ps_duty: 40 | 80 | 160 | 320,
-          ps_pers: 1 | 2 | 3 | 4,
-          ps_it: :t1 | :t1_5 | :t2 | :t2_5 | :t3 | :t3_5 | :t4 | :t8,
-          ps_sd: boolean()
-        } | [{atom(), term()}], map() | nil) :: {:ps_conf1, binary()}
+  @spec ps_conf1(
+          %{
+            ps_duty: 40 | 80 | 160 | 320,
+            ps_pers: 1 | 2 | 3 | 4,
+            ps_it: :t1 | :t1_5 | :t2 | :t2_5 | :t3 | :t3_5 | :t4 | :t8,
+            ps_sd: boolean()
+          }
+          | [{atom(), term()}],
+          map() | nil
+        ) :: {:ps_conf1, binary()}
   def ps_conf1(kv \\ [], d \\ nil) do
-    cfg = 
-      d || @default_ps_conf1
-      |> Map.merge(Map.new(kv))
+    cfg =
+      d ||
+        @default_ps_conf1
+        |> Map.merge(Map.new(kv))
 
     {:ps_conf1,
      <<
@@ -498,14 +536,20 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and config map.
   """
-  @spec ps_conf2(%{
-          ps_hd: 12 | 16,
-          ps_int: :disable | :close | :away | :both
-        } | [{}], map() | nil) :: {:ps_conf2, binary()}
+  @spec ps_conf2(
+          %{
+            ps_hd: 12 | 16,
+            ps_int: :disable | :close | :away | :both
+          }
+          | [{}],
+          map() | nil
+        ) :: {:ps_conf2, binary()}
   def ps_conf2(kv \\ [], d \\ nil) do
-    cfg = 
-      d || @default_ps_conf2
-      |> Map.merge(Map.new(kv))
+    cfg =
+      d ||
+        @default_ps_conf2
+        |> Map.merge(Map.new(kv))
+
     {:ps_conf2,
      <<
        @reserved_zero::bitstring,
@@ -517,7 +561,6 @@ defmodule VCNL4040.DeviceConfig do
        f(@ps_int, cfg.ps_int)::bitstring
      >>, cfg}
   end
-
 
   @default_ps_conf3 %{
     ps_mps: 1,
@@ -531,17 +574,23 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and config map.
   """
-  @spec ps_conf3(%{
-          ps_mps: 1 | 2 | 4 | 8,
-          ps_smart_pers: boolean(),
-          ps_af: boolean(),
-          ps_trig: boolean(),
-          ps_sc_en: boolean()
-        } | [{atom(), term()}], map() | nil) :: {:ps_conf3, binary()}
+  @spec ps_conf3(
+          %{
+            ps_mps: 1 | 2 | 4 | 8,
+            ps_smart_pers: boolean(),
+            ps_af: boolean(),
+            ps_trig: boolean(),
+            ps_sc_en: boolean()
+          }
+          | [{atom(), term()}],
+          map() | nil
+        ) :: {:ps_conf3, binary()}
   def ps_conf3(kv \\ [], d \\ nil) do
-    cfg = 
-      d || @default_ps_conf3
-      |> Map.merge(Map.new(kv))
+    cfg =
+      d ||
+        @default_ps_conf3
+        |> Map.merge(Map.new(kv))
+
     {:ps_conf3,
      <<
        @reserved_zero::bitstring,
@@ -566,15 +615,21 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and config map.
   """
-  @spec ps_ms(%{
-          white_en: boolean(),
-          ps_ms: :normal | :detection,
-          led_i: 50 | 75 | 100 | 120 | 140 | 160 | 180 | 200
-        } | [{atom(), term()}], map() | nil) :: {:ps_ms, binary()}
+  @spec ps_ms(
+          %{
+            white_en: boolean(),
+            ps_ms: :normal | :detection,
+            led_i: 50 | 75 | 100 | 120 | 140 | 160 | 180 | 200
+          }
+          | [{atom(), term()}],
+          map() | nil
+        ) :: {:ps_ms, binary()}
   def ps_ms(kv \\ [], d \\ nil) do
-    cfg = 
-      d || @default_ps_ms
-      |> Map.merge(Map.new(kv))
+    cfg =
+      d ||
+        @default_ps_ms
+        |> Map.merge(Map.new(kv))
+
     {:ps_ms,
      <<
        f(@white_en, cfg.white_en)::bitstring,
@@ -639,7 +694,13 @@ defmodule VCNL4040.DeviceConfig do
         als_thdl: :uint16le,
         ps_conf1: [ps_duty: @ps_duty, ps_pers: @ps_pers, ps_it: @ps_it, ps_sd: @ps_sd],
         ps_conf2: [ps_hd: @ps_hd, ps_int: @ps_int],
-        ps_conf3: [ps_mps: @ps_mps, ps_smart_pers: @ps_smart_pers, ps_af: @ps_af, ps_trig: @ps_trig, ps_sc_en: @ps_sc_en],
+        ps_conf3: [
+          ps_mps: @ps_mps,
+          ps_smart_pers: @ps_smart_pers,
+          ps_af: @ps_af,
+          ps_trig: @ps_trig,
+          ps_sc_en: @ps_sc_en
+        ],
         ps_ms: [white_en: @white_en, ps_ms: @ps_ms, led_i: @led_i],
         ps_canc: :uint16le,
         ps_thdh: :uint16le,

@@ -34,12 +34,16 @@ defmodule VCNL4040.MixProject do
     ]
   end
 
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:circuits_i2c, "~> 2.0"},
       {:circuits_gpio, "~> 2.0"},
-      {:circular_buffer, "~> 0.4.1"}
+      {:circular_buffer, "~> 0.4.1"},
+      {:ex_doc, "~> 0.31", only: :dev, runtime: false}
     ]
   end
 end

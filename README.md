@@ -1,10 +1,9 @@
 # VCNL4040
 
-**TODO: Add description**
+This is a Circuits-based Elixir driver for the VCNL4040. The VCNL4040 is an ambient light and proximity sensor. It uses I2C and GPIO for communication and has a pretty cool set of features.
 
-## Simulated device
-
-There is a simulated device for the VCNL4040 in [circuits_sim](https://github.com/elixir-circuits/circuits_sim) at some stage of completion.
+For details on the hardware consult [the datasheet](https://www.vishay.com/docs/84274/vcnl4040.pdf). There is additional useful detail about the sensor in [the
+  implementation notes](https://www.vishay.com/docs/84307/designingvcnl4040.pdf).
 
 ## Installation
 
@@ -18,6 +17,10 @@ def deps do
   ]
 end
 ```
+
+## Simulated device
+
+There is a simulated device for the VCNL4040 in [circuits_sim](https://github.com/elixir-circuits/circuits_sim) at some stage of completion. At the time of writing it does not have GPIO interrupt support.
 
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can

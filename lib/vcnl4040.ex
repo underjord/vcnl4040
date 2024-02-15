@@ -1,12 +1,11 @@
 defmodule VCNL4040 do
   @moduledoc """
-  GenServer driver for Ambient Light Sensor and Prox Sensor combo
+  GenServer-based driver module for ambient light and proximity sensor combo.
+
   See datasheet: https://www.vishay.com/docs/84274/vcnl4040.pdf
   Implementation notes: https://www.vishay.com/docs/84307/designingvcnl4040.pdf
-
-
-  There is simulator device at some level of completion: https://github.com/elixir-circuits/circuits_sim/blob/main/lib/circuits_sim/device/vcnl4040.ex
   """
+
   use GenServer
   require Logger
   alias VCNL4040.DeviceConfig
@@ -17,7 +16,7 @@ defmodule VCNL4040 do
   Start the ambient light/proximity sensor driver
 
   Options:
-  * `:name` - regular GenServer registration name, makes public API functions more convenient if only using one sensor
+  * `:name` - regular GenServer registration name, makes public API functions more convenient if only using one sensor.
   * `:i2c_bus` - defaults to `"i2c-0"`
   * `:device_config` - defaults to turning on ambient light sensor and proximity sensor for polling. Pass your own `DeviceConfig` to modify.
   * `:interrupt_pin` - required to enable interrupt-driven sensing, requires the hardware connection for GPIO INT pin set up
@@ -163,24 +162,58 @@ defmodule VCNL4040 do
 
   @doc """
   Returns true if the combo prox/light sensor is present and matches the expected device ID.
+
+  This assumes you registered your GenServer with `name: VCNL4040`.
+
+  Returns a boolean indicating whether the sensor is present.
+  """
+  @spec sensor_present? :: boolean
+  def sensor_present?, do: sensor_present?(__MODULE__)
+
+  @doc """
+  Returns true if the combo prox/light sensor is present and matches the expected device ID.
   """
   @spec sensor_present?(GenServer.server()) :: boolean
-  def sensor_present?(server \\ __MODULE__) when is_server(server) do
+  def sensor_present?(server) when is_server(server) do
     GenServer.call(server, :sensor_present?)
   catch
     :exit, {error, _} ->
       Logger.error("Failed to check if sensor is present: #{inspect(error)}")
+      false
   end
 
   @light_types [:filtered, :lux, :raw]
   @doc """
-  Returns the current filtered reading from the ambient light sensor
+  Returns the current reading from the ambient light sensor
+
+  This assumes you registered your GenServer with `name: VCNL4040`.
+
+  The `type` argument can be:
+
+  * `:filtered` - converted to lux and the median of the samples in the buffer, avoiding outliers.
+  * `:lux` - latest read, converted to lux.
+  * `:raw` - latest read, straight from the sensor. If you have some weird use for it.
 
   Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
   """
-  @spec get_ambient_light_value(GenServer.server(), :filtered | :lux | :raw) ::
+  @spec get_ambient_light(:filtered | :lux | :raw) ::
           number() | {:error, :no_sensor | :timeout | :noproc}
-  def get_ambient_light_value(server \\ __MODULE__, type \\ :filtered)
+  def get_ambient_light(type), do: get_ambient_light(__MODULE__, type)
+
+  @doc """
+  Returns the current filtered reading from the ambient light sensor.
+
+  The `type` argument can be:
+
+  * `:filtered` - converted to lux and the median of the samples in the buffer, avoiding outliers.
+  * `:lux` - latest read, converted to lux.
+  * `:raw` - latest read, straight from the sensor. If you have some weird use for it.
+
+  Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
+  """
+  @spec get_ambient_light(GenServer.server(), :filtered | :lux | :raw) ::
+          number() | {:error, :no_sensor | :timeout | :noproc}
+  def get_ambient_light(server, type)
       when is_server(server) and type in @light_types do
     GenServer.call(server, {:get_ambient_light, type})
   catch
@@ -188,23 +221,83 @@ defmodule VCNL4040 do
   end
 
   @proximity_types [:filtered, :raw]
-  def get_proximity_value(server \\ __MODULE__, type \\ :filtered)
+  @doc """
+  Returns the current reading from the ambient light sensor.
+
+  This assumes you registered your GenServer with `name: VCNL4040`.
+
+  The `type` argumnet can be:
+
+  * `:filtered` - converted to lux and the median of the samples in the buffer, avoiding outliers.
+  * `:raw` - latest read, straight from the sensor. If you have some weird use for it.
+
+  Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
+  """
+  def get_proximity(type), do: get_proximity(__MODULE__, type)
+
+  @doc """
+  Returns the current reading from the ambient light sensor.
+
+  The `type` argumnet can be:
+
+  * `:filtered` - converted to lux and the median of the samples in the buffer, avoiding outliers.
+  * `:raw` - latest read, straight from the sensor. If you have some weird use for it.
+
+  Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
+  """
+  def get_proximity(server, type)
       when is_server(server) and type in @proximity_types do
     GenServer.call(server, {:get_proximity, type})
   catch
     :exit, {error, _} -> {:error, error}
   end
 
-  # TODO: Add get_device_config
-  def get_device_config(server \\ __MODULE__) when is_server(server) do
+  @doc """
+  Returns the current `VCNL4040.DeviceConfig` struct.
+
+  This assumes you registered your GenServer with `name: VCNL4040`.
+
+  Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
+  """
+  @spec get_device_config() :: map() | {:error, :no_sensor | :timeout | :noproc}
+  def get_device_config, do: get_device_config(__MODULE__)
+
+  @doc """
+  Returns the current `VCNL4040.DeviceConfig` struct.
+
+  This assumes you registered your GenServer with `name: VCNL4040`.
+
+  Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
+  """
+  @spec get_device_config(GenServer.server()) :: map() | {:error, :no_sensor | :timeout | :noproc}
+  def get_device_config(server) when is_server(server) do
     GenServer.call(server, :get_device_config)
   catch
     :exit, {error, _} -> {:error, error}
   end
 
-  def set_device_config(server \\ __MODULE__, %DeviceConfig{} = device_config)
+  @doc """
+  Sets a new `VCNL4040.DeviceConfig` and applies it to the hardware.
+
+  This assumes you registered your GenServer with `name: VCNL4040`.
+
+  Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
+  """
+  @spec set_device_config(%DeviceConfig{}) :: :ok | {:error, :no_sensor | :timeout | :noproc}
+  def set_device_config(%DeviceConfig{} = device_config),
+    do: set_device_config(__MODULE__, device_config)
+
+  @doc """
+  Sets a new `VCNL4040.DeviceConfig` and applies it to the hardware.
+
+  Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
+  """
+  @spec set_device_config(GenServers.server(), %DeviceConfig{}) ::
+          :ok | {:error, :no_sensor | :timeout | :noproc}
+  def set_device_config(server, %DeviceConfig{} = device_config)
       when is_server(server) do
     GenServer.call(server, {:set_device_config, device_config})
+    :ok
   catch
     :exit, {error, _} -> {:error, error}
   end
