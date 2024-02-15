@@ -5,6 +5,8 @@ This is a Circuits-based Elixir driver for the VCNL4040. The VCNL4040 is an ambi
 For details on the hardware consult [the datasheet](https://www.vishay.com/docs/84274/vcnl4040.pdf). There is additional useful detail about the sensor in [the
   implementation notes](https://www.vishay.com/docs/84307/designingvcnl4040.pdf).
 
+I would not consider the API completely stable yet but it is being tested for real world use.
+
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
