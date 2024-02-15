@@ -21,13 +21,14 @@ defmodule Vcnl4040.State do
             ambient_light: %{
               integration_time: 80,
               readings: nil,
+              latest_raw: 0,
               latest_lux: 0,
               latest_filtered: 0
             },
             proximity: %{
               integration_time: :t1,
               readings: nil,
-              latest_value: 0,
+              latest_raw: 0,
               latest_filtered: 0
             },
             log_samples: false
@@ -68,7 +69,7 @@ defmodule Vcnl4040.State do
       proximity: %{
         integration_time: Keyword.get(options, :ps_integration_time, :t1),
         readings: CircularBuffer.new(buffer_size),
-        latest_value: 0,
+        latest_raw: 0,
         latest_filtered: 0
       },
       log_samples: Keyword.get(options, :log_samples, false)
@@ -79,7 +80,8 @@ defmodule Vcnl4040.State do
   def set_valid(%S{} = s, valid?), do: %S{s | valid?: valid?}
   def set_interrupt_ref(%S{} = s, interrupt_ref), do: %S{s | interrupt_ref: interrupt_ref}
 
-  def add_ambient_light_sample(%S{ambient_light: %{readings: readings} = a} = s, lux_value) do
+  def add_ambient_light_sample(%S{ambient_light: %{readings: readings} = a} = s, raw_value) do
+    lux_value = als_sample_to_lux(s, raw_value)
     readings = CircularBuffer.insert(readings, lux_value)
 
     filtered_value =
@@ -87,10 +89,11 @@ defmodule Vcnl4040.State do
       |> CircularBuffer.to_list()
       |> get_median()
 
-    %S{
+    %S{s |
       ambient_light: %{
         a
         | readings: readings,
+          latest_raw: raw_value,
           latest_lux: lux_value,
           latest_filtered: filtered_value
       }
@@ -105,14 +108,31 @@ defmodule Vcnl4040.State do
       |> CircularBuffer.to_list()
       |> get_median()
 
-    %S{
+    %S{s |
       proximity: %{
         p
         | readings: readings,
-          latest_value: value,
+          latest_raw: value,
           latest_filtered: filtered_value
       }
     }
+  end
+
+  def inspect_reading(%S{} = state) do
+    """
+      == Sample ======================
+
+      -- Ambient Light Sensor --------
+      raw: #{state.ambient_light.latest_raw}
+      lux: #{state.ambient_light.latest_lux}
+      filtered: #{state.ambient_light.latest_filtered}
+      samples: #{inspect(CircularBuffer.to_list(state.ambient_light.readings), charlists: :as_lists)}
+
+      -- Proximity Sensor ------------
+      raw: #{state.proximity.latest_raw}
+      filtered: #{state.proximity.latest_filtered}
+      samples: #{inspect(CircularBuffer.to_list(state.proximity.readings), charlists: :as_lists)}
+    """
   end
 
   defp get_median(list) do

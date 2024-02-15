@@ -6,16 +6,10 @@ defmodule Vcnl4040 do
   """
   use GenServer
   require Logger
-  alias Circuits.I2C
   alias Vcnl4040.DeviceConfig
   alias Vcnl4040.State
+  alias Vcnl4040.Hardware
 
-  @expected_device_addr 0x60
-  @expected_device_id <<0x86, 0x01>>
-  @device_interrupt_register <<0x0B>>
-  @ps_data_register 0x08
-  @als_data_register 0x09
-  @device_id_register <<0x0C>>
 
   @doc """
   Start the ambient light/proximity sensor driver
@@ -31,23 +25,19 @@ defmodule Vcnl4040 do
   @impl GenServer
   def init(options) do
     state = State.from_options(options)
-    {:ok, bus_ref} = I2C.open(state.i2c_bus)
-    state = State.set_bus_ref(state, bus_ref)
-    # confirm sensor is present and returns correct device ID
-    state =
-      case I2C.write_read(state.i2c_bus, @expected_device_addr, @device_id_register, 2) do
-        {:ok, dev_id} ->
-          State.set_valid?(state, dev_id == @expected_device_id)
 
-        _ ->
-          State.set_valid?(state, false)
-      end
+    {:ok, bus_ref} = Hardware.open(state.i2c_bus)
+
+    state =
+      state
+      |> State.set_bus_ref(bus_ref)
+      |> State.set_valid(Hardware.is_valid?(bus_ref))
 
     if state.valid? do
       state.device_config
       |> DeviceConfig.get_all_registers_for_i2c()
       |> Enum.each(fn register_data ->
-        I2C.write!(state.bus_ref, @expected_device_addr, register_data)
+        Hardware.write_register(state.bus_ref, register_data)
       end)
 
       # TODO: Reimplement sensor_check_timer for blockages outside of library
@@ -55,15 +45,15 @@ defmodule Vcnl4040 do
       # Set up interrupt pin
       state =
         if state.interrupt_pin do
-          {:ok, interrupt_ref} = Circuits.GPIO.open(@interrupt_pin, :input, pullmode: :pullup)
-          :ok = Circuits.GPIO.set_interrupts(interrupt_ref, :both)
-          State.set_interrupt(state, interrupt_ref)
+          {:ok, interrupt_ref} = Hardware.setup_interrupts(state.interrupt_pin)
+          State.set_interrupt_ref(state, interrupt_ref)
         else
           state
         end
 
       if state.polling_sample_interval do
-        :timer.send_interval(state.polling_sample_interval, :sample)
+        # Start the polling
+        poll_me_maybe(state)
       end
 
       {:ok, state}
@@ -75,6 +65,7 @@ defmodule Vcnl4040 do
   @impl GenServer
   def handle_info(:sample, %State{valid?: true} = state) do
     state = sample_sensors(state)
+    poll_me_maybe(state)
 
     {:noreply, state}
   end
@@ -86,7 +77,7 @@ defmodule Vcnl4040 do
       process_interrupt(timestamp, value, state)
     else
       Logger.warning(
-        "Received unexpected non-interrupt pin message from GPIO pin #{pin}: #{inspect(value)}"
+        "Received unexpected pin message from GPIO pin #{pin}: #{inspect(value)}"
       )
 
       {:noreply, state}
@@ -121,41 +112,23 @@ defmodule Vcnl4040 do
   end
 
   defp process_interrupt(_timestamp, _value, %State{} = state) do
-    # Clear interrupt flag
-    _ = I2C.read!(state.bus_ref, @expected_device_addr, @device_interrupt_register)
-
+    Hardware.clear_interrupts(state.bus_ref)
     state = sample_sensors(state)
 
     {:noreply, state}
   end
 
   defp sample_sensors(state) do
-    <<raw_als_value::little-16>> =
-      I2C.write_read!(state.bus_ref, @expected_device_addr, <<@als_data_register>>, 2)
+    raw_als_value = Hardware.read_ambient_light(state.bus_ref)
+    state = State.add_ambient_light_sample(state, raw_als_value)
 
-    # Scale ALS value using the lux-per-step value
-    lux_als_value = State.als_sample_to_lux(state, raw_als_value)
-    state = State.add_ambient_light_sample(state, lux_als_value)
-
-    proximity_value = get_prox_reading(state.bus_ref)
+    proximity_value = Hardware.read_proximity(state.bus_ref)
     state = State.add_proximity_sample(state, proximity_value)
 
     if state.log_samples do
-      Logger.info("""
-      == Sample ======================
-
-      -- Ambient Light Sensor --------
-      raw: #{raw_als_value}
-      lux: #{lux_als_value}
-      filtered: #{state.ambient_light.latest_filtered}
-      samples: #{inspect(CircularBuffer.to_list(state.ambient_light.readings), charlists: :as_lists)}
-
-      -- Proximity Sensor ------------
-      raw: #{proximity_value}
-      filtered: #{state.proximity.latest_filtered}
-      samples: #{inspect(CircularBuffer.to_list(state.proximity.readings), charlists: :as_lists)}
-
-      """)
+      state
+      |> State.inspect_reading()
+      |> Logger.info()
     end
 
     state
@@ -201,10 +174,10 @@ defmodule Vcnl4040 do
     :exit, {error, _} -> {:error, error}
   end
 
-  defp get_prox_reading(bus_ref) do
-    <<prox_reading::little-16>> =
-      I2C.write_read!(bus_ref, @expected_device_addr, <<@ps_data_register>>, 2)
-
-    prox_reading
+  # We use send_after rather than :timer.send_interval to limit the risk of messaging
+  # filling up on slow-down
+  defp poll_me_maybe(%State{polling_sample_interval: nil}), do: :ok
+  defp poll_me_maybe(%State{polling_sample_interval: interval}) when interval > 0 do
+    Process.send_after(self(), :sample, interval)
   end
 end
