@@ -99,8 +99,12 @@ defmodule Vcnl4040 do
     {:reply, state.ambient_light.latest_filtered, state}
   end
 
-  def handle_call(:get_ambient_light_raw, _from, state) do
+  def handle_call(:get_ambient_light_lux, _from, state) do
     {:reply, state.ambient_light.latest_lux, state}
+  end
+
+  def handle_call(:get_ambient_light_raw, _from, state) do
+    {:reply, state.ambient_light.latest_raw, state}
   end
 
   def handle_call(:get_proximity, _from, state) do
@@ -108,7 +112,7 @@ defmodule Vcnl4040 do
   end
 
   def handle_call(:get_proximity_raw, _from, state) do
-    {:reply, state.proximity.latest_value, state}
+    {:reply, state.proximity.latest_raw, state}
   end
 
   defp process_interrupt(_timestamp, _value, %State{} = state) do
@@ -136,10 +140,9 @@ defmodule Vcnl4040 do
 
   @doc """
   Returns true if the combo prox/light sensor is present and matches the expected device ID.
-  Pass optional keyword list with `:i2c_bus` set to change bus used during check.
   """
   @spec sensor_present?() :: boolean
-  def sensor_present?() do
+  def sensor_present? do
     GenServer.call(__MODULE__, :sensor_present?)
   end
 
@@ -148,9 +151,16 @@ defmodule Vcnl4040 do
 
   Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
   """
-  @spec get_ambient_light_value() :: number() | {:error, :no_sensor | :timeout | :noproc}
-  def get_ambient_light_value() do
+  @spec get_ambient_light_value :: number() | {:error, :no_sensor | :timeout | :noproc}
+  def get_ambient_light_value do
     GenServer.call(__MODULE__, :get_ambient_light)
+  catch
+    :exit, {error, _} -> {:error, error}
+  end
+
+  @spec get_ambient_light_value(:lux) :: number() | {:error, :no_sensor | :timeout | :noproc}
+  def get_ambient_light_value(:lux) do
+    GenServer.call(__MODULE__, :get_ambient_light_lux)
   catch
     :exit, {error, _} -> {:error, error}
   end
