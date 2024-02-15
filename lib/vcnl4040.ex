@@ -1,14 +1,17 @@
-defmodule Vcnl4040 do
+defmodule VCNL4040 do
   @moduledoc """
   GenServer driver for Ambient Light Sensor and Prox Sensor combo
   See datasheet: https://www.vishay.com/docs/84274/vcnl4040.pdf
   Implementation notes: https://www.vishay.com/docs/84307/designingvcnl4040.pdf
+
+
+  There is simulator device at some level of completion: https://github.com/elixir-circuits/circuits_sim/blob/main/lib/circuits_sim/device/vcnl4040.ex
   """
   use GenServer
   require Logger
-  alias Vcnl4040.DeviceConfig
-  alias Vcnl4040.State
-  alias Vcnl4040.Hardware
+  alias VCNL4040.DeviceConfig
+  alias VCNL4040.State
+  alias VCNL4040.Hardware
 
 
   @doc """
@@ -45,9 +48,7 @@ defmodule Vcnl4040 do
     if state.valid? do
       state.device_config
       |> DeviceConfig.get_all_registers_for_i2c()
-      |> Enum.each(fn register_data ->
-        Hardware.write_register(state.bus_ref, register_data)
-      end)
+      |> Hardware.apply_device_config(bus_ref)
 
       # TODO: Reimplement sensor_check_timer for blockages outside of library
 
@@ -79,7 +80,7 @@ defmodule Vcnl4040 do
     {:noreply, state}
   end
 
-  def handle_info(:sample, state), do: {:noreply, state}
+  def handle_info(:sample, %State{} = state), do: {:noreply, state}
 
   def handle_info({:circuits_gpio, pin, timestamp, value}, %State{valid?: true} = state) do
     if pin == state.interrupt_pin do
@@ -93,35 +94,42 @@ defmodule Vcnl4040 do
     end
   end
 
-  def handle_info(_message, state), do: {:noreply, state}
+  def handle_info(_message, %State{} = state), do: {:noreply, state}
 
   @impl GenServer
-  def handle_call(:sensor_present?, _from, state) do
+  def handle_call(:sensor_present?, _from, %State{} = state) do
     {:reply, state.valid?, state}
   end
 
-  def handle_call(_, _from, %{valid?: false} = state) do
+  def handle_call(_, _from, %{valid?: false} = %State{} = state) do
     {:reply, {:error, :no_sensor}, state}
   end
 
-  def handle_call(:get_ambient_light, _from, state) do
+  def handle_call(:get_ambient_light, _from, %State{} = state) do
     {:reply, state.ambient_light.latest_filtered, state}
   end
 
-  def handle_call(:get_ambient_light_lux, _from, state) do
+  def handle_call(:get_ambient_light_lux, _from, %State{} = state) do
     {:reply, state.ambient_light.latest_lux, state}
   end
 
-  def handle_call(:get_ambient_light_raw, _from, state) do
+  def handle_call(:get_ambient_light_raw, _from, %State{} = state) do
     {:reply, state.ambient_light.latest_raw, state}
   end
 
-  def handle_call(:get_proximity, _from, state) do
+  def handle_call(:get_proximity, _from, %State{} = state) do
     {:reply, state.proximity.latest_filtered, state}
   end
 
-  def handle_call(:get_proximity_raw, _from, state) do
+  def handle_call(:get_proximity_raw, _from, %State{} = state) do
     {:reply, state.proximity.latest_raw, state}
+  end
+
+  def handle_call({:set_device_config, %DeviceConfig{} = device_config}, _from, %State{} = state) do
+    device_config
+    |> DeviceConfig.get_all_registers_for_i2c()
+    |> Hardware.apply_device_config(state.bus_ref)
+    {:reply, :ok, %State{state | device_config: device_config}}
   end
 
   defp process_interrupt(_timestamp, _value, %State{} = state) do
@@ -191,6 +199,12 @@ defmodule Vcnl4040 do
     GenServer.call(__MODULE__, :get_proximity_value_raw)
   catch
     :exit, {error, _} -> {:error, error}
+  end
+
+  # TODO: Add get_device_config
+
+  def set_device_config(%DeviceConfig{} = device_config) do
+    GenServer.call(__MODULE__, {:set_device_config, device_config})
   end
 
   # We use send_after rather than :timer.send_interval to limit the risk of messaging

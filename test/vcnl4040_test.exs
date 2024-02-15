@@ -1,3 +1,3 @@
-defmodule Vcnl4040Test do
+defmodule VCNL4040Test do
   use ExUnit.Case
 end

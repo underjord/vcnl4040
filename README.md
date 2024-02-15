@@ -1,4 +1,4 @@
-# Vcnl4040
+# VCNL4040
 
 **TODO: Add description**
 

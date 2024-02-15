@@ -1,4 +1,4 @@
-defmodule Vcnl4040.MixProject do
+defmodule VCNL4040.MixProject do
   use Mix.Project
 
   def project do

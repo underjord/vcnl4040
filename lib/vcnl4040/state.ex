@@ -1,13 +1,13 @@
-defmodule Vcnl4040.State do
+defmodule VCNL4040.State do
   @moduledoc """
-  State module for the Vcnl4040 GenServer.
+  State module for the VCNL4040 GenServer.
 
   Separated out both to make code reloads easier
   and to separate out pure state operations from the
   fun and exciting world of messaging.
   """
 
-  alias Vcnl4040.DeviceConfig
+  alias VCNL4040.DeviceConfig
   @default_sample_interval 1000
   @default_buffer_size 9
 
@@ -42,7 +42,7 @@ defmodule Vcnl4040.State do
     640 => 0.015
   }
 
-  alias Vcnl4040.State, as: S
+  alias VCNL4040.State, as: S
 
   def max_lux(%S{ambient_light: %{integration_time: it}}) do
     65536 * @als_integration_to_lux_step[it]

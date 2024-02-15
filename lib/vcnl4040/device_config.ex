@@ -1,4 +1,4 @@
-defmodule Vcnl4040.DeviceConfig do
+defmodule VCNL4040.DeviceConfig do
   defstruct registers: %{}
 
   @registers %{

@@ -1,4 +1,4 @@
-defmodule Vcnl4040.Hardware do
+defmodule VCNL4040.Hardware do
     alias Circuits.I2C
     @expected_device_addr 0x60
     @expected_device_id <<0x86, 0x01>>
@@ -33,6 +33,12 @@ defmodule Vcnl4040.Hardware do
         <<prox_reading::little-16>> =
             I2C.write_read!(bus_ref, @expected_device_addr, <<@ps_data_register>>, 2)
         prox_reading
+    end
+
+    def apply_device_config(registers, bus_ref) when is_list(registers) do
+        Enum.each(registers, fn register_data ->
+            write_register(bus_ref, register_data)
+        end)
     end
 
     def setup_interrupts(pin) do

@@ -1,7 +1,7 @@
-defmodule Vcnl4040.DeviceConfigTest do
+defmodule VCNL4040.DeviceConfigTest do
   use ExUnit.Case
 
-  alias Vcnl4040.DeviceConfig
+  alias VCNL4040.DeviceConfig
 
   test "check default registers generated" do
     assert %DeviceConfig{registers: empty} = e = DeviceConfig.new()
