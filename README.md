@@ -2,6 +2,10 @@
 
 **TODO: Add description**
 
+## Simulated device
+
+There is a simulated device for the VCNL4040 in [circuits_sim](https://github.com/elixir-circuits/circuits_sim) at some stage of completion.
+
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
