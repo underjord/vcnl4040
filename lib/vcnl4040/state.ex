@@ -1,11 +1,5 @@
 defmodule VCNL4040.State do
-  @moduledoc """
-  State module for the VCNL4040 GenServer.
-
-  Separated out both to make code reloads easier
-  and to separate out pure state operations from the
-  fun and exciting world of messaging.
-  """
+  @moduledoc false
 
   alias VCNL4040.DeviceConfig
   @default_sample_interval 1000

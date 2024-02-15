@@ -1,5 +1,6 @@
 defmodule VCNL4040.DeviceConfigTest do
   use ExUnit.Case
+  doctest VCNL4040.DeviceConfig
 
   alias VCNL4040.DeviceConfig
 

@@ -18,6 +18,28 @@ def deps do
 end
 ```
 
+## Getting started
+
+If you have I2C hooked up on your device, typically under Nerves:
+
+```
+iex> Circuits.I2C.detect_devices() # Use to find the right one, example: "i2c-1"
+# .. lots of output, looks for a single device on a single bus, typically
+iex> VCNL4040.start_link(i2c_bus: "i2c-1", name: VCNL4040, log_samples?: true)
+{:ok, _pid}
+iex> VCNL4040.sensor_present?()
+true
+iex> RingLogger.attach
+# You should start seeing the logged samples from the default setup
+# because of log_samples?: true
+```
+
+With `log_samples?: true` you should get sample output in your logs every second by default.
+
+See `VCNL4040.start_link/1` for more detailed documentation on start options.
+
+See `VCNL4040.DeviceConfig` for more detailed configuration of the hardware.
+
 ## Simulated device
 
 There is a simulated device for the VCNL4040 in [circuits_sim](https://github.com/elixir-circuits/circuits_sim) at some stage of completion. At the time of writing it does not have GPIO interrupt support.

@@ -1,4 +1,31 @@
 defmodule VCNL4040.DeviceConfig do
+  @moduledoc """
+  Module for managing device configuration.
+
+  Typically applied during `VCNL4040.start_link/1` or with `VCNL4040.set_device_config/2`.
+
+  There are some utility functions but much of the API-surface is based on
+  the naming conventions in [the datasheet](https://www.vishay.com/docs/84274/vcnl4040.pdf).
+
+  ## Examples
+
+  ```
+  iex> import VCNL4040.DeviceConfig
+  iex> new() |> update!(:als_conf, als_it: 320)
+  %VCNL4040.DeviceConfig{config: %{
+      als_conf: %{
+        als_it: 320,
+        als_int_en: false,
+        als_pers: 1,
+        als_sd: true
+      }
+    },
+    registers: %{
+      als_conf: <<129>>
+    }
+  }
+  ```
+  """
   defstruct registers: %{}, config: %{}
 
   @registers %{
@@ -336,8 +363,6 @@ defmodule VCNL4040.DeviceConfig do
     |> set!(ps_conf2(ps_hd: 16, ps_int: interrupts))
   end
 
-  # TODO: Add convenience for Proximity sensor with Active Force mode, including a trigger function
-
   @doc """
   Merges the second configuration onto the first.
 
@@ -349,6 +374,30 @@ defmodule VCNL4040.DeviceConfig do
     %C{c | registers: Map.merge(base, override)}
   end
 
+  @doc """
+  This will set a DeviceConfig register based on the output of a register function.
+
+  Returns the updated DeviceConfig struct.
+
+  ## Example
+
+  ```
+  iex> import VCNL4040.DeviceConfig
+  iex> new() |> set!(als_conf(als_it: 320))
+  %VCNL4040.DeviceConfig{config: %{
+      als_conf: %{
+        als_it: 320,
+        als_int_en: false,
+        als_pers: 1,
+        als_sd: true
+      }
+    },
+    registers: %{
+      als_conf: <<129>>
+    }
+  }
+  ```
+  """
   def set!(%C{} = c, {register, <<_::16>> = value, cfg})
       when register in @threshold_pair_labels do
     %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
@@ -358,6 +407,30 @@ defmodule VCNL4040.DeviceConfig do
     %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
   end
 
+  @doc """
+  This will granularly update a DeviceConfig.
+
+  Returns the updated DeviceConfig struct.
+
+  ## Example
+
+  ```
+  iex> import VCNL4040.DeviceConfig
+  iex> new() |> update!(:als_conf, als_it: 320) |> update!(:als_conf, als_pers: 2)
+  %VCNL4040.DeviceConfig{config: %{
+      als_conf: %{
+        als_it: 320,
+        als_int_en: false,
+        als_pers: 1,
+        als_sd: true
+      }
+    },
+    registers: %{
+      als_conf: <<129>>
+    }
+  }
+  ```
+  """
   def update!(%C{} = c, register, v)
       when register in @threshold_pair_labels and is_threshold(v) do
     {^register, <<_::16>> = value, cfg} = apply(__MODULE__, register, [v, c.config[register]])
@@ -385,6 +458,13 @@ defmodule VCNL4040.DeviceConfig do
     end
   end
 
+  @doc """
+  Output a binary appropriate for writing to I2C.
+
+  Label is a writable register as an atom, example: `:als_conf` or `:ps_conf2`
+
+  Return value includes 8-bit address prefixed to the payload.
+  """
   def get_register_for_i2c(%C{} = c, label) when label in @write_registers do
     {address, _offset} = @registers[label]
 
@@ -402,6 +482,9 @@ defmodule VCNL4040.DeviceConfig do
     <<address::8, payload::binary>>
   end
 
+  @doc """
+  Get all writable registers, ready for I2C writing.
+  """
   def get_all_registers_for_i2c(%C{} = c) do
     @i2c_registers
     |> Enum.map(&get_register_for_i2c(c, &1))
