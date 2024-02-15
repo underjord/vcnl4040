@@ -16,6 +16,15 @@ defmodule Vcnl4040 do
 
   Options:
   * `:i2c_bus` - defaults to `"i2c-0"`
+  * `:device_config` - defaults to turning on ambient light sensor and proximity sensor for polling. Pass your own `DeviceConfig` to modify.
+  * `:interrupt_pin` - required to enable interrupt-driven sensing, requires the hardware connection for GPIO INT pin set up
+  * `:poll_interval` - millisecond interval for polling sensors. Set to `nil` to disable. Default: 1000 (1 second)
+  * `:buffer_samples` - size of the internal circular buffer for filtered readings. Default: 9
+  * `:als_enable?` - enable the Ambient Light Sensor immediately. Default: true (not hardware default)
+  * `:als_integration_time` - integration time for Ambient Light Sensor. Default: 80
+  * `:ps_enable?` - enable the Proximity Sensor immediately. Default: true (not hardware default)
+  * `:ps_integration_time` - integration time for Proximity Sensor. Default: :t1 (weirdo time units, see data sheet?)
+  * `:log_samples?` - always print sample collection to log. Default: false
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(options \\ []) do
@@ -129,7 +138,7 @@ defmodule Vcnl4040 do
     proximity_value = Hardware.read_proximity(state.bus_ref)
     state = State.add_proximity_sample(state, proximity_value)
 
-    if state.log_samples do
+    if state.log_samples? do
       state
       |> State.inspect_reading()
       |> Logger.info()

@@ -19,6 +19,7 @@ defmodule Vcnl4040.State do
             interrupt_ref: nil,
             polling_sample_interval: @default_sample_interval,
             ambient_light: %{
+              enable?: true,
               integration_time: 80,
               readings: nil,
               latest_raw: 0,
@@ -26,12 +27,13 @@ defmodule Vcnl4040.State do
               latest_filtered: 0
             },
             proximity: %{
+              enable: true,
               integration_time: :t1,
               readings: nil,
               latest_raw: 0,
               latest_filtered: 0
             },
-            log_samples: false
+            log_samples?: false
 
   @als_integration_to_lux_step %{
     80 => 0.12,
@@ -54,25 +56,30 @@ defmodule Vcnl4040.State do
     interrupt_pin = Keyword.get(options, :interrupt_pin, nil)
     buffer_size = Keyword.get(options, :buffer_samples, @default_buffer_size)
 
+    base_device_config =
+        DeviceConfig.merge_configs(DeviceConfig.als_for_polling(), DeviceConfig.ps_for_polling())
+
     %S{
       i2c_bus: Keyword.get(options, :i2c_bus, "i2c-0"),
-      device_config: Keyword.get(options, :device_config, DeviceConfig.new()),
+      device_config: Keyword.get(options, :device_config, base_device_config),
       interrupt_pin: interrupt_pin,
       polling_sample_interval: Keyword.get(options, :poll_interval, 1000),
       ambient_light: %{
-        als_integration_time: Keyword.get(options, :als_integration_time, 80),
+        enabled?: Keyword.get(options, :als_enable?, true),
+        integration_time: Keyword.get(options, :als_integration_time, 80),
         readings: CircularBuffer.new(buffer_size),
         latest_raw: 0,
         latest_lux: 0,
         latest_filtered: 0
       },
       proximity: %{
+        enabled?: Keyword.get(options, :ps_enable?, true),
         integration_time: Keyword.get(options, :ps_integration_time, :t1),
         readings: CircularBuffer.new(buffer_size),
         latest_raw: 0,
         latest_filtered: 0
       },
-      log_samples: Keyword.get(options, :log_samples, false)
+      log_samples?: Keyword.get(options, :log_samples?, false)
     }
   end
 
