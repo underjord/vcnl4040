@@ -72,36 +72,48 @@ defmodule VCNL4040.DeviceConfigTest do
     end)
 
     DeviceConfig.values()
-    |> Enum.each(fn {fun, arg_values} ->
-      if arg_values != %{} and is_map(arg_values) do
-        # Call this config function with only defaults
-        {^fun, <<_bin::binary>>, _cfg} = res = apply(DeviceConfig, fun, [])
-        first_cfg = DeviceConfig.set!(blank, res)
-        first_binary = to_binaries(first_cfg)
-        # Might be same or changed from blank/base
+    |> Enum.reduce(%{}, fn {fun, arg_values}, seen ->
+      case arg_values do
+        [{_key, _value}| _] ->
+          # Call this config function with only defaults
+          {^fun, <<_bin::binary>>, _cfg} = res = apply(DeviceConfig, fun, [])
+          first_cfg = DeviceConfig.set!(blank, res)
+          first_binary = to_binaries(first_cfg)
+          # Might be same or changed from blank/base
 
-        arg_values
-        |> Enum.with_index()
-        |> Enum.each(fn {key, arg_value_set} ->
-          arg_value_set
-          |> Enum.each(fn arg ->
-            # Only pass in the single arg that we want to modify versus the first case/defaults
-            {^fun, <<_bin::binary>>, _cfg} = res = apply(DeviceConfig, fun, [%{key => arg}])
-            this_cfg = DeviceConfig.set!(first_cfg, res)
-            this_binary = to_binaries(this_cfg)
+          arg_values
+          |> Enum.reduce(seen, fn {key, arg_value_set}, seen2 ->
+            arg_value_set
+            |> Map.keys()
+            |> Enum.reduce(seen2, fn arg, seen3 ->
+              {^fun, <<_bin::binary>>, _cfg} = res = apply(DeviceConfig, fun, [%{key => arg}])
+              this_cfg = DeviceConfig.set!(first_cfg, res)
+              this_binary = to_binaries(this_cfg)
 
-            if this_cfg == first_cfg do
-              assert this_binary == first_binary
-            else
-              if this_binary == first_binary do
-                IO.puts("#{fun} at field #{key} and value #{arg}")
+              if this_cfg == first_cfg do
+                assert this_binary == first_binary
+                seen3
+              else
+                if this_binary == first_binary do
+                  IO.puts("#{fun} at field #{key} and value #{arg}")
+                end
+                # Never before seen!
+                if not is_nil(seen3[this_binary]) do
+                  IO.puts("#{fun} at field #{key} and value #{arg}")
+                end
+                assert is_nil(seen3[this_binary])
+                assert this_binary != first_binary
+                Map.put(seen3, this_binary, this_cfg)
               end
-              assert this_binary != first_binary
-            end
+            end)
           end)
-        end)
-      else
+      [min, max] when is_integer(min) and is_integer(max) ->
         # TODO: test uint16le
+        assert true
+        seen
+      [] ->
+        assert true
+        seen
       end
     end)
   end

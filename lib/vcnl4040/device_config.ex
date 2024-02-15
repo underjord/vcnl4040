@@ -264,7 +264,7 @@ defmodule VCNL4040.DeviceConfig do
   def als_for_polling(integration_time_ms \\ 80, persistence_times \\ 1) do
     new()
     # integration time, persistence times, no interrupts, turn on
-    |> set!(als_conf(als_it: integration_time_ms, als_pers: persistence_times, als_int_en: false, als_sd: false))
+    |> update!(:als_conf, als_it: integration_time_ms, als_pers: persistence_times, als_int_en: false, als_sd: false)
   end
 
   @doc """
@@ -281,8 +281,8 @@ defmodule VCNL4040.DeviceConfig do
       when is_threshold(low_threshold) and is_threshold(high_threshold) do
     new()
     # integration time, persistence times, interrupts, turn on
-    |> set!(als_conf(als_it: integration_time_ms, als_pers: persistence_times, als_int_en: true, als_sd: false))
-    |> set!(als_thdl(low_threshold))
+    |> update!(:als_conf, als_it: integration_time_ms, als_pers: persistence_times, als_int_en: true, als_sd: false)
+    |> update!(:als_thdl, low_threshold)
     |> set!(als_thdh(high_threshold))
   end
 
@@ -325,27 +325,21 @@ defmodule VCNL4040.DeviceConfig do
     %C{c | registers: Map.merge(base, override)}
   end
 
-  def set!(%C{} = c, {register, value, cfg})
-      when (register in @register_labels or register in @threshold_pair_labels) and
-             is_binary(value) do
-    case value do
-      <<_::16>> ->
-        %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
-
-      <<_::8>> ->
-        %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
-    end
+  def set!(%C{} = c, {register, <<_::16>> = value, cfg}) when register in @threshold_pair_labels do
+    %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
+  end
+  def set!(%C{} = c, {register, <<_::8>> = value, cfg}) when register in @register_labels do
+    %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
   end
 
-  def update!(%C{} = c, register, kv \\ []) when (register in @register_labels or register in @threshold_pair_labels) and (is_map(kv) or is_list(kv)) do
-    {^register, value, cfg} = apply(__MODULE__, register, [kv, c.config[register]])
-    case value do
-      <<_::16>> ->
-        %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
+  def update!(%C{} = c, register, v) when register in @threshold_pair_labels and is_threshold(v) do
+    {^register, <<_::16>> = value, cfg} = apply(__MODULE__, register, [v, c.config[register]])
+    %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
+  end
 
-      <<_::8>> ->
-        %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
-    end
+  def update!(%C{} = c, register, kv) when register in @register_labels and (is_map(kv) or is_list(kv)) do
+    {^register, <<_::8>> = value, cfg} = apply(__MODULE__, register, [kv, c.config[register]])
+    %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
   end
 
   defp register_to_binary(%C{} = c, label) when label in @write_registers do
