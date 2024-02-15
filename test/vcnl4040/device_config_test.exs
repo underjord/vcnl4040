@@ -62,10 +62,10 @@ defmodule VCNL4040.DeviceConfigTest do
              0::16
            >> = base = to_binaries(blank)
 
-    # Run all set-calls with no args, should produce identical results
+    # Run all set-calls with no args, should produce identical results to defaults
     DeviceConfig.values()
     |> Enum.each(fn {fun, _} ->
-      {^fun, <<_bin::binary>>} = res = apply(DeviceConfig, fun, [])
+      {^fun, <<_bin::binary>>, _cfg} = res = apply(DeviceConfig, fun, [])
       # Should be unchanged
       new = DeviceConfig.set!(blank, res)
       assert to_binaries(new) == base
@@ -73,33 +73,35 @@ defmodule VCNL4040.DeviceConfigTest do
 
     DeviceConfig.values()
     |> Enum.each(fn {fun, arg_values} ->
-      if arg_values != [] do
-        first_args = base_arg_values(arg_values)
-        {^fun, <<_bin::binary>>} = res = apply(DeviceConfig, fun, first_args)
+      if arg_values != %{} and is_map(arg_values) do
+        # Call this config function with only defaults
+        {^fun, <<_bin::binary>>, _cfg} = res = apply(DeviceConfig, fun, [])
         first_cfg = DeviceConfig.set!(blank, res)
         first_binary = to_binaries(first_cfg)
         # Might be same or changed from blank/base
 
         arg_values
         |> Enum.with_index()
-        |> Enum.each(fn {arg_value_set, pos} ->
+        |> Enum.each(fn {key, arg_value_set} ->
           arg_value_set
           |> Enum.each(fn arg ->
-            these_args = List.replace_at(first_args, pos, arg)
+            # Only pass in the single arg that we want to modify versus the first case/defaults
+            {^fun, <<_bin::binary>>, _cfg} = res = apply(DeviceConfig, fun, [%{key => arg}])
+            this_cfg = DeviceConfig.set!(first_cfg, res)
+            this_binary = to_binaries(this_cfg)
 
-            if these_args != first_args do
-              {^fun, <<_bin::binary>>} = res = apply(DeviceConfig, fun, these_args)
-              this_cfg = DeviceConfig.set!(first_cfg, res)
-              this_binary = to_binaries(this_cfg)
-
+            if this_cfg == first_cfg do
+              assert this_binary == first_binary
+            else
               if this_binary == first_binary do
-                IO.puts("#{fun} at argument position #{pos} and value #{arg}")
+                IO.puts("#{fun} at field #{key} and value #{arg}")
               end
-
               assert this_binary != first_binary
             end
           end)
         end)
+      else
+        # TODO: test uint16le
       end
     end)
   end
@@ -126,9 +128,20 @@ defmodule VCNL4040.DeviceConfigTest do
            >> = DeviceConfig.get_register_for_i2c(c, :ps_conf2)
   end
 
-  defp base_arg_values(arg_values) do
-    arg_values
-    |> Enum.map(&List.first/1)
+  test "update device config piece by piece" do
+    c = DeviceConfig.new()
+    assert c.config[:als_conf] == nil
+    assert %DeviceConfig{config: %{als_conf: %{als_it: 320}}} = c = DeviceConfig.update!(c, :als_conf, als_it: 320)
+    assert <<
+             # als_conf address
+             0x00,
+             # als_conf section
+             1::1,
+             0::6,
+             1::1,
+             # reserved section
+             0::8
+           >> = DeviceConfig.get_register_for_i2c(c, :als_conf)
   end
 
   defp to_binaries(c) do

@@ -1,5 +1,5 @@
 defmodule VCNL4040.DeviceConfig do
-  defstruct registers: %{}
+  defstruct registers: %{}, config: %{}
 
   @registers %{
     # label: {address, byte offset}
@@ -264,7 +264,7 @@ defmodule VCNL4040.DeviceConfig do
   def als_for_polling(integration_time_ms \\ 80, persistence_times \\ 1) do
     new()
     # integration time, persistence times, no interrupts, turn on
-    |> set!(als_conf(integration_time_ms, persistence_times, false, false))
+    |> set!(als_conf(als_it: integration_time_ms, als_pers: persistence_times, als_int_en: false, als_sd: false))
   end
 
   @doc """
@@ -281,7 +281,7 @@ defmodule VCNL4040.DeviceConfig do
       when is_threshold(low_threshold) and is_threshold(high_threshold) do
     new()
     # integration time, persistence times, interrupts, turn on
-    |> set!(als_conf(integration_time_ms, persistence_times, true, false))
+    |> set!(als_conf(als_it: integration_time_ms, als_pers: persistence_times, als_int_en: true, als_sd: false))
     |> set!(als_thdl(low_threshold))
     |> set!(als_thdh(high_threshold))
   end
@@ -291,8 +291,8 @@ defmodule VCNL4040.DeviceConfig do
   """
   def ps_for_polling(duty_cycle \\ 40, persistance_times \\ 1, integration_time \\ :t1) do
     new()
-    |> set!(ps_conf1(duty_cycle, persistance_times, integration_time, false))
-    |> set!(ps_conf2(16))
+    |> set!(ps_conf1(ps_duty: duty_cycle, ps_pers: persistance_times, ps_it: integration_time, ps_sd: false))
+    |> set!(ps_conf2(ps_hd: 16))
   end
 
   @doc """
@@ -308,8 +308,8 @@ defmodule VCNL4040.DeviceConfig do
       )
       when is_threshold(low_threshold) and is_threshold(high_threshold) do
     new()
-    |> set!(ps_conf1(duty_cycle, persistance_times, integration_time, false))
-    |> set!(ps_conf2(16, interrupts))
+    |> set!(ps_conf1(ps_duty: duty_cycle, ps_pers: persistance_times, ps_it: integration_time, ps_sd: false))
+    |> set!(ps_conf2(ps_hd: 16, ps_int: interrupts))
   end
 
   # TODO: Add convenience for Proximity sensor with Active Force mode, including a trigger function
@@ -325,15 +325,26 @@ defmodule VCNL4040.DeviceConfig do
     %C{c | registers: Map.merge(base, override)}
   end
 
-  def set!(%C{} = c, {register, value})
+  def set!(%C{} = c, {register, value, cfg})
       when (register in @register_labels or register in @threshold_pair_labels) and
              is_binary(value) do
     case value do
       <<_::16>> ->
-        %C{registers: Map.put(c.registers, register, value)}
+        %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
 
       <<_::8>> ->
-        %C{registers: Map.put(c.registers, register, value)}
+        %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
+    end
+  end
+
+  def update!(%C{} = c, register, kv \\ []) when (register in @register_labels or register in @threshold_pair_labels) and (is_map(kv) or is_list(kv)) do
+    {^register, value, cfg} = apply(__MODULE__, register, [kv, c.config[register]])
+    case value do
+      <<_::16>> ->
+        %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
+
+      <<_::8>> ->
+        %C{registers: Map.put(c.registers, register, value), config: Map.put(c.config, register, cfg)}
     end
   end
 
@@ -374,31 +385,41 @@ defmodule VCNL4040.DeviceConfig do
     |> Enum.map(&get_register_for_i2c(c, &1))
   end
 
+  @default_als_conf %{
+    als_it: 80,
+    als_pers: 1,
+    als_int_en: false,
+    als_sd: true
+  }
   @doc """
   Ambient Light Sensor configuration.
 
-  Returns binary ready to write to register.
+  Returns a tuple tagged by field with binary and config map.
   """
-  @spec als_conf(
-          integration_time_ms :: 80 | 160 | 320 | 640,
-          persistence_times :: 1 | 2 | 4 | 8,
-          enable_interrupt? :: boolean(),
-          shut_down? :: boolean()
-        ) :: {:als_conf, binary()}
-  def als_conf(als_it \\ 80, als_pers \\ 1, als_int_en \\ false, als_sd \\ true) do
+  @spec als_conf(%{
+          als_it: 80 | 160 | 320 | 640,
+          als_pers: 1 | 2 | 4 | 8,
+          als_int_en: boolean(),
+          als_sd: boolean()
+        } | [{atom(), term()}], map() | nil) :: {:als_conf, binary()}
+  def als_conf(kv \\ [], d \\ nil) do
+    cfg = 
+      d || @default_als_conf
+      |> Map.merge(Map.new(kv))
+
     {:als_conf,
      <<
-       f(@als_it, als_it)::bitstring,
+       f(@als_it, cfg.als_it)::bitstring,
        @reserved_zero::bitstring,
        @reserved_zero::bitstring,
-       f(@als_pers, als_pers)::bitstring,
-       f(@als_int_en, als_int_en)::bitstring,
-       f(@als_sd, als_sd)::bitstring
-     >>}
+       f(@als_pers, cfg.als_pers)::bitstring,
+       f(@als_int_en, cfg.als_int_en)::bitstring,
+       f(@als_sd, cfg.als_sd)::bitstring
+     >>, cfg}
   end
 
   def reserved do
-    {:reserved, <<0::8>>}
+    {:reserved, <<0::8>>, %{}}
   end
 
   @doc """
@@ -406,7 +427,7 @@ defmodule VCNL4040.DeviceConfig do
 
   Alias for `als_thdh` with better name.
 
-  Returns a binary ready to write to register.
+  Returns a tuple tagged by field with binary and value.
   """
   @spec als_threshhold_high(high :: non_neg_integer()) :: binary()
   def als_threshhold_high(high \\ 0) when is_threshold(high), do: als_thdh(high)
@@ -414,11 +435,11 @@ defmodule VCNL4040.DeviceConfig do
   @doc """
   Sets high threshold for Ambient Light Sensor interrupt.
 
-  Returns a binary ready to write to register.
+  Returns a tuple tagged by field with binary and value.
   """
-  @spec als_thdh(high :: non_neg_integer()) :: binary()
-  def als_thdh(high \\ 0) when is_threshold(high) do
-    {:als_thdh, <<high::little-16>>}
+  @spec als_thdh(high :: non_neg_integer(), default :: non_neg_integer() | nil) :: binary()
+  def als_thdh(high \\ 0, _ \\ nil) when is_threshold(high) do
+    {:als_thdh, <<high::little-16>>, high}
   end
 
   @doc """
@@ -426,7 +447,7 @@ defmodule VCNL4040.DeviceConfig do
 
   Alias for `als_thdl` with better name.
 
-  Returns a binary ready to write to register.
+  Returns a tuple tagged by field with binary and value.
   """
   @spec als_threshhold_high(high :: non_neg_integer()) :: binary()
   def als_threshhold_low(low \\ 0) when is_threshold(low), do: als_thdl(low)
@@ -434,129 +455,159 @@ defmodule VCNL4040.DeviceConfig do
   @doc """
   Sets low threshold for Ambient Light Sensor interrupt.
 
-  Returns a binary ready to write to register.
+  Returns a tuple tagged by field with binary and value.
   """
-  @spec als_thdh(high :: non_neg_integer()) :: binary()
+  @spec als_thdh(high :: non_neg_integer(), default :: non_neg_integer() | nil) :: binary()
   def als_thdl(low \\ 0) when is_threshold(low) do
-    {:als_thdl, <<low::little-16>>}
+    {:als_thdl, <<low::little-16>>, low}
   end
 
+  @default_ps_conf1 %{
+    ps_duty: 40,
+    ps_pers: 1,
+    ps_it: :t1,
+    ps_sd: true
+  }
   @doc """
   Proximity sensor configuration, part 1.
 
   Duty cycle is 1/40, 1/80, 1/160, 1/320.
 
-  Returns a binary ready to write to register.
+  Returns a tuple tagged by field with binary and config map.
   """
-  @spec ps_conf1(
-          duty_cycle :: 40 | 80 | 160 | 320,
-          persistance_times :: 1 | 2 | 3 | 4,
-          integration_time :: :t1 | :t1_5 | :t2 | :t2_5 | :t3 | :t3_5 | :t4 | :t8,
-          shutdown? :: boolean()
-        ) :: {:ps_conf1, binary()}
-  def ps_conf1(ps_duty \\ 40, ps_pers \\ 1, ps_it \\ :t1, ps_sd \\ true) do
+  @spec ps_conf1(%{
+          ps_duty: 40 | 80 | 160 | 320,
+          ps_pers: 1 | 2 | 3 | 4,
+          ps_it: :t1 | :t1_5 | :t2 | :t2_5 | :t3 | :t3_5 | :t4 | :t8,
+          ps_sd: boolean()
+        } | [{atom(), term()}], map() | nil) :: {:ps_conf1, binary()}
+  def ps_conf1(kv \\ [], d \\ nil) do
+    cfg = 
+      d || @default_ps_conf1
+      |> Map.merge(Map.new(kv))
+
     {:ps_conf1,
      <<
-       f(@ps_duty, ps_duty)::bitstring,
-       f(@ps_pers, ps_pers)::bitstring,
-       f(@ps_it, ps_it)::bitstring,
-       f(@ps_sd, ps_sd)::bitstring
-     >>}
+       f(@ps_duty, cfg.ps_duty)::bitstring,
+       f(@ps_pers, cfg.ps_pers)::bitstring,
+       f(@ps_it, cfg.ps_it)::bitstring,
+       f(@ps_sd, cfg.ps_sd)::bitstring
+     >>, cfg}
   end
 
+  @default_ps_conf2 %{
+    ps_hd: 12,
+    ps_int: :disable
+  }
   @doc """
   Proximity sensor configuration, part 2
 
-  Returns a binary ready to write to register.
+  Returns a tuple tagged by field with binary and config map.
   """
-  @spec ps_conf2(
-          definition_bits :: 12 | 16,
-          interrupt_mode :: :disable | :close | :away | :both
-        ) :: {:ps_conf2, binary()}
-  def ps_conf2(ps_hd \\ 12, ps_int \\ :disable) do
+  @spec ps_conf2(%{
+          ps_hd: 12 | 16,
+          ps_int: :disable | :close | :away | :both
+        } | [{}], map() | nil) :: {:ps_conf2, binary()}
+  def ps_conf2(kv \\ [], d \\ nil) do
+    cfg = 
+      d || @default_ps_conf2
+      |> Map.merge(Map.new(kv))
     {:ps_conf2,
      <<
        @reserved_zero::bitstring,
        @reserved_zero::bitstring,
        @reserved_zero::bitstring,
        @reserved_zero::bitstring,
-       f(@ps_hd, ps_hd)::bitstring,
+       f(@ps_hd, cfg.ps_hd)::bitstring,
        @reserved_zero::bitstring,
-       f(@ps_int, ps_int)::bitstring
-     >>}
+       f(@ps_int, cfg.ps_int)::bitstring
+     >>, cfg}
   end
 
+
+  @default_ps_conf3 %{
+    ps_mps: 1,
+    ps_smart_pers: false,
+    ps_af: false,
+    ps_trig: false,
+    ps_sc_en: false
+  }
   @doc """
   Proximity sensor configuration, part 3
 
-  Returns a binary ready to write to register.
+  Returns a tuple tagged by field with binary and config map.
   """
-  @spec ps_conf3(
-          multi_pulse_count :: 1 | 2 | 4 | 8,
-          smart_persistence? :: boolean(),
-          active_force_mode? :: boolean(),
-          active_force_trigger :: boolean(),
-          sunlight_cancellation? :: boolean()
-        ) :: {:ps_conf3, binary()}
-  def ps_conf3(
-        ps_mps \\ 1,
-        ps_smart_pers \\ false,
-        ps_af \\ false,
-        ps_trig \\ false,
-        ps_sc_en \\ false
-      ) do
+  @spec ps_conf3(%{
+          ps_mps: 1 | 2 | 4 | 8,
+          ps_smart_pers: boolean(),
+          ps_af: boolean(),
+          ps_trig: boolean(),
+          ps_sc_en: boolean()
+        } | [{atom(), term()}], map() | nil) :: {:ps_conf3, binary()}
+  def ps_conf3(kv \\ [], d \\ nil) do
+    cfg = 
+      d || @default_ps_conf3
+      |> Map.merge(Map.new(kv))
     {:ps_conf3,
      <<
        @reserved_zero::bitstring,
-       f(@ps_mps, ps_mps)::bitstring,
-       f(@ps_smart_pers, ps_smart_pers)::bitstring,
-       f(@ps_af, ps_af)::bitstring,
-       f(@ps_trig, ps_trig)::bitstring,
+       f(@ps_mps, cfg.ps_mps)::bitstring,
+       f(@ps_smart_pers, cfg.ps_smart_pers)::bitstring,
+       f(@ps_af, cfg.ps_af)::bitstring,
+       f(@ps_trig, cfg.ps_trig)::bitstring,
        @reserved_zero::bitstring,
-       f(@ps_sc_en, ps_sc_en)::bitstring
-     >>}
+       f(@ps_sc_en, cfg.ps_sc_en)::bitstring
+     >>, cfg}
   end
 
+  @default_ps_ms %{
+    white_en: false,
+    ps_ms: :normal,
+    led_i: 50
+  }
   @doc """
   Proximity sensor - More Settings?
 
   ps_ms means detection logic mode, it will disable ALS interrupts.
 
-  Returns a binary ready to write to register.
+  Returns a tuple tagged by field with binary and config map.
   """
-  @spec ps_ms(
-          white_channel? :: boolean(),
-          detection_logic_mode? :: :normal | :detection,
-          led_intensity_ma :: 50 | 75 | 100 | 120 | 140 | 160 | 180 | 200
-        ) :: {:ps_ms, binary()}
-  def ps_ms(white_en \\ false, ps_ms \\ :normal, led_i \\ 50) do
+  @spec ps_ms(%{
+          white_en: boolean(),
+          ps_ms: :normal | :detection,
+          led_i: 50 | 75 | 100 | 120 | 140 | 160 | 180 | 200
+        } | [{atom(), term()}], map() | nil) :: {:ps_ms, binary()}
+  def ps_ms(kv \\ [], d \\ nil) do
+    cfg = 
+      d || @default_ps_ms
+      |> Map.merge(Map.new(kv))
     {:ps_ms,
      <<
-       f(@white_en, white_en)::bitstring,
-       f(@ps_ms, ps_ms)::bitstring,
+       f(@white_en, cfg.white_en)::bitstring,
+       f(@ps_ms, cfg.ps_ms)::bitstring,
        @reserved_zero::bitstring,
        @reserved_zero::bitstring,
        @reserved_zero::bitstring,
-       f(@led_i, led_i)::bitstring
-     >>}
+       f(@led_i, cfg.led_i)::bitstring
+     >>, cfg}
   end
 
   def ps_cancellation(value \\ 0) when is_threshold(value), do: ps_canc(value)
 
-  def ps_canc(value \\ 0) when is_threshold(value) do
-    {:ps_canc, <<value::little-16>>}
+  def ps_canc(value \\ 0, _ \\ nil) when is_threshold(value) do
+    {:ps_canc, <<value::little-16>>, value}
   end
 
   def ps_threshold_high(high \\ 0) when is_threshold(high), do: ps_thdh(high)
 
-  def ps_thdh(high \\ 0) when is_threshold(high) do
-    {:ps_thdh, <<high::little-16>>}
+  def ps_thdh(high \\ 0, _ \\ nil) when is_threshold(high) do
+    {:ps_thdh, <<high::little-16>>, high}
   end
 
   def ps_threshold_low(low \\ 0) when is_threshold(low), do: ps_thdl(low)
 
-  def ps_thdl(low \\ 0) when is_threshold(low) do
-    {:ps_thdl, <<low::little-16>>}
+  def ps_thdl(low \\ 0, _ \\ nil) when is_threshold(low) do
+    {:ps_thdl, <<low::little-16>>, low}
   end
 
   defp regular_register_value(c, register) do
@@ -588,24 +639,23 @@ defmodule VCNL4040.DeviceConfig do
   if Mix.env() == :test do
     def values do
       %{
-        als_conf: [@als_it, @als_pers, @als_int_en, @als_sd],
+        als_conf: [als_it: @als_it, als_pers: @als_pers, als_int_en: @als_int_en, als_sd: @als_sd],
         reserved: [],
-        als_thdh: [:uint16le],
-        als_thdl: [:uint16le],
-        ps_conf1: [@ps_duty, @ps_pers, @ps_it, @ps_sd],
-        ps_conf2: [@ps_hd, @ps_int],
-        ps_conf3: [@ps_mps, @ps_smart_pers, @ps_af, @ps_trig, @ps_sc_en],
-        ps_ms: [@white_en, @ps_ms, @led_i],
-        ps_canc: [:uint16le],
-        ps_thdh: [:uint16le],
-        ps_thdl: [:uint16le]
+        als_thdh: :uint16le,
+        als_thdl: :uint16le,
+        ps_conf1: [ps_duty: @ps_duty, ps_pers: @ps_pers, ps_it: @ps_it, ps_sd: @ps_sd],
+        ps_conf2: [ps_hd: @ps_hd, ps_int: @ps_int],
+        ps_conf3: [ps_mps: @ps_mps, ps_smart_pers: @ps_smart_pers, ps_af: @ps_af, ps_trig: @ps_trig, ps_sc_en: @ps_sc_en],
+        ps_ms: [white_en: @white_en, ps_ms: @ps_ms, led_i: @led_i],
+        ps_canc: :uint16le,
+        ps_thdh: :uint16le,
+        ps_thdl: :uint16le
       }
-      # Make them consistently ordered
       |> Enum.map(fn {field, arg_values} ->
         {field,
          case arg_values do
-           [:uint16le] -> [[@threshold_min, @threshold_max]]
-           items -> Enum.map(items, &Map.keys/1)
+           :uint16le -> [@threshold_min, @threshold_max]
+           items -> items
          end}
       end)
     end
