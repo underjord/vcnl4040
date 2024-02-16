@@ -6,6 +6,7 @@ defmodule VCNL4040.State do
   @default_buffer_size 9
 
   defstruct i2c_bus: nil,
+            notify_pid: nil,
             valid?: false,
             interrupt_pin: nil,
             bus_ref: nil,
@@ -55,6 +56,7 @@ defmodule VCNL4040.State do
 
     %S{
       i2c_bus: Keyword.get(options, :i2c_bus, "i2c-0"),
+      notify_pid: Keyword.get(options, :notify_pid, nil),
       device_config: Keyword.get(options, :device_config, base_device_config),
       interrupt_pin: interrupt_pin,
       polling_sample_interval: Keyword.get(options, :poll_interval, 1000),

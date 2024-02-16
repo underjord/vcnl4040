@@ -18,6 +18,7 @@ defmodule VCNL4040 do
   Options:
   * `:name` - regular GenServer registration name, makes public API functions more convenient if only using one sensor.
   * `:i2c_bus` - defaults to `"i2c-0"`
+  * `:notify_pid` - PID to notify on every sample pulled. Default: nil
   * `:device_config` - defaults to turning on ambient light sensor and proximity sensor for polling. Pass your own `DeviceConfig` to modify.
   * `:interrupt_pin` - required to enable interrupt-driven sensing, requires the hardware connection for GPIO INT pin set up
   * `:poll_interval` - millisecond interval for polling sensors. Set to `nil` to disable. Default: 1000 (1 second)
@@ -148,6 +149,13 @@ defmodule VCNL4040 do
 
     proximity_value = Hardware.read_proximity(state.bus_ref)
     state = State.add_proximity_sample(state, proximity_value)
+
+    if state.notify_pid do
+      send(state.notify_pid, {:vcnl4040_sample, %{
+        ambient_light: Map.take(state.ambient_light, [:latest_raw, :latest_lux, :latest_filtered]),
+        proximity: Map.take(state.proximity, [:latest_raw, :latest_filtered])
+      }})
+    end
 
     if state.log_samples? do
       state

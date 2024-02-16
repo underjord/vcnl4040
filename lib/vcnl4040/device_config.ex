@@ -320,7 +320,7 @@ defmodule VCNL4040.DeviceConfig do
       als_sd: false
     )
     |> update!(:als_thdl, low_threshold)
-    |> set!(als_thdh(high_threshold))
+    |> update!(:als_thdh, high_threshold)
   end
 
   @doc """
@@ -352,15 +352,18 @@ defmodule VCNL4040.DeviceConfig do
       )
       when is_threshold(low_threshold) and is_threshold(high_threshold) do
     new()
-    |> set!(
-      ps_conf1(
+    |> update!(:ps_conf1, %{
         ps_duty: duty_cycle,
         ps_pers: persistance_times,
         ps_it: integration_time,
         ps_sd: false
-      )
-    )
-    |> set!(ps_conf2(ps_hd: 16, ps_int: interrupts))
+      })
+    |> update!(:ps_conf2, %{
+      ps_hd: 16,
+      ps_int: interrupts
+    })
+    |> update!(:ps_thdl, low_threshold)
+    |> update!(:ps_thdh, high_threshold)
   end
 
   @doc """
@@ -370,8 +373,8 @@ defmodule VCNL4040.DeviceConfig do
   It can be used to combine your settings for als_conf and ps_conf1 but
   not two different als_conf registers. The second one will win.
   """
-  def merge_configs(%C{registers: base} = c, %C{registers: override}) do
-    %C{c | registers: Map.merge(base, override)}
+  def merge_configs(%C{} = c1, %C{} = c2) do
+    %C{c1 | registers: Map.merge(c1.registers, c2.registers), config: Map.merge(c1.config, c2.config)}
   end
 
   @doc """
@@ -568,7 +571,7 @@ defmodule VCNL4040.DeviceConfig do
   Returns a tuple tagged by field with binary and value.
   """
   @spec als_thdh(high :: non_neg_integer(), default :: non_neg_integer() | nil) :: binary()
-  def als_thdl(low \\ 0) when is_threshold(low) do
+  def als_thdl(low \\ 0, _ \\ nil) when is_threshold(low) do
     {:als_thdl, <<low::little-16>>, low}
   end
 
