@@ -62,6 +62,6 @@ defmodule VCNL4040.Hardware do
   end
 
   def clear_interrupts(bus_ref) do
-    I2C.read!(bus_ref, @expected_device_addr, @device_interrupt_register)
+    I2C.write_read!(bus_ref, @expected_device_addr, <<@device_interrupt_register>>, 2)
   end
 end
