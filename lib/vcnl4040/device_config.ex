@@ -353,11 +353,11 @@ defmodule VCNL4040.DeviceConfig do
       when is_threshold(low_threshold) and is_threshold(high_threshold) do
     new()
     |> update!(:ps_conf1, %{
-        ps_duty: duty_cycle,
-        ps_pers: persistance_times,
-        ps_it: integration_time,
-        ps_sd: false
-      })
+      ps_duty: duty_cycle,
+      ps_pers: persistance_times,
+      ps_it: integration_time,
+      ps_sd: false
+    })
     |> update!(:ps_conf2, %{
       ps_hd: 16,
       ps_int: interrupts
@@ -374,7 +374,11 @@ defmodule VCNL4040.DeviceConfig do
   not two different als_conf registers. The second one will win.
   """
   def merge_configs(%C{} = c1, %C{} = c2) do
-    %C{c1 | registers: Map.merge(c1.registers, c2.registers), config: Map.merge(c1.config, c2.config)}
+    %C{
+      c1
+      | registers: Map.merge(c1.registers, c2.registers),
+        config: Map.merge(c1.config, c2.config)
+    }
   end
 
   @doc """

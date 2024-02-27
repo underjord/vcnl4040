@@ -39,37 +39,41 @@ defmodule VCNL4040 do
   def init(options) do
     state = State.from_options(options)
 
-    {:ok, bus_ref} = Hardware.open(state.i2c_bus)
-
-    state =
-      state
-      |> State.set_bus_ref(bus_ref)
-      |> State.set_valid(Hardware.is_valid?(bus_ref))
-
-    if state.valid? do
-      state.device_config
-      |> DeviceConfig.get_all_registers_for_i2c()
-      |> Hardware.apply_device_config(bus_ref)
-
-      # TODO: Reimplement sensor_check_timer for blockages outside of library
-
-      # Set up interrupt pin
-      state =
-        if state.interrupt_pin do
-          {:ok, interrupt_ref} = Hardware.setup_interrupts(state.interrupt_pin)
-          State.set_interrupt_ref(state, interrupt_ref)
-        else
+    case Hardware.open(state.i2c_bus) do
+      {:ok, bus_ref} ->
+        state =
           state
+          |> State.set_bus_ref(bus_ref)
+          |> State.set_valid(Hardware.is_valid?(bus_ref))
+
+        if state.valid? do
+          state.device_config
+          |> DeviceConfig.get_all_registers_for_i2c()
+          |> Hardware.apply_device_config(bus_ref)
+
+          # TODO: Reimplement sensor_check_timer for blockages outside of library
+
+          # Set up interrupt pin
+          state =
+            if state.interrupt_pin do
+              {:ok, interrupt_ref} = Hardware.setup_interrupts(state.interrupt_pin)
+              State.set_interrupt_ref(state, interrupt_ref)
+            else
+              state
+            end
+
+          if state.polling_sample_interval do
+            # Start the polling
+            poll_me_maybe(state)
+          end
+
+          {:ok, state}
+        else
+          {:error, :invalid_device}
         end
 
-      if state.polling_sample_interval do
-        # Start the polling
-        poll_me_maybe(state)
-      end
-
-      {:ok, state}
-    else
-      {:error, :invalid_device}
+      {:error, reason} ->
+        {:error, {:open_failed, reason}}
     end
   end
 
@@ -151,10 +155,15 @@ defmodule VCNL4040 do
     state = State.add_proximity_sample(state, proximity_value)
 
     if state.notify_pid do
-      send(state.notify_pid, {:vcnl4040_sample, %{
-        ambient_light: Map.take(state.ambient_light, [:latest_raw, :latest_lux, :latest_filtered]),
-        proximity: Map.take(state.proximity, [:latest_raw, :latest_filtered])
-      }})
+      send(
+        state.notify_pid,
+        {:vcnl4040_sample,
+         %{
+           ambient_light:
+             Map.take(state.ambient_light, [:latest_raw, :latest_lux, :latest_filtered]),
+           proximity: Map.take(state.proximity, [:latest_raw, :latest_filtered])
+         }}
+      )
     end
 
     if state.log_samples? do
