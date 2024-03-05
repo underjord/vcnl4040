@@ -34,6 +34,143 @@ defmodule VCNL4040.DeviceConfigTest do
            >> = to_binaries(e)
   end
 
+  test "generate ps config with interrupts" do
+    assert dc = DeviceConfig.ps_with_interrupts(5, 50, :both, 40, 3, :t2)
+
+    assert <<
+             # als_conf
+             0x01::8,
+             # reserved
+             0::8,
+             # als_thdh
+             0::16,
+             # als_thdl
+             0::16,
+             # ps_conf1
+             36::8,
+             # ps_conf2
+             11::8,
+             # ps_conf3
+             0::8,
+             # ps_ms
+             0::8,
+             # ps_canc
+             0::16,
+             # ps_thdl
+             5::8,
+             0::8,
+             # ps_thdh
+             50::8,
+             0::8
+           >> = to_binaries(dc)
+  end
+
+  test "change a couple of register values" do
+    assert %DeviceConfig{registers: empty} = e = DeviceConfig.new()
+    assert %{} == empty
+
+    assert <<
+             # als_conf
+             0x01::8,
+             # reserved
+             0::8,
+             # als_thdh
+             0::16,
+             # als_thdl
+             0::16,
+             # ps_conf1
+             0x01::8,
+             # ps_conf2
+             0::8,
+             # ps_conf3
+             0::8,
+             # ps_ms
+             0::8,
+             # ps_canc
+             0::16,
+             # ps_thdl
+             0::16,
+             # ps_thdh
+             0::16
+           >> = base = to_binaries(e)
+
+    new =
+      e
+      # Turn proximity sensor on, is off by default
+      |> DeviceConfig.update!(:ps_conf1, ps_sd: false, ps_pers: 3)
+
+    assert <<
+             # als_conf
+             0x01::8,
+             # reserved
+             0::8,
+             # als_thdh
+             0::16,
+             # als_thdl
+             0::16,
+             # ps_conf1
+             32::8,
+             # ps_conf2
+             0::8,
+             # ps_conf3
+             0::8,
+             # ps_ms
+             0::8,
+             # ps_canc
+             0::16,
+             # ps_thdl
+             0::16,
+             # ps_thdh
+             0::16
+           >> = update1 = to_binaries(new)
+
+    refute update1 == base
+
+    new =
+      new
+      |> DeviceConfig.update!(:ps_conf2, ps_int: :both)
+
+    assert <<
+             # als_conf
+             0x01::8,
+             # reserved
+             0::8,
+             # als_thdh
+             0::16,
+             # als_thdl
+             0::16,
+             # ps_conf1
+             32::8,
+             # ps_conf2
+             0x03::8,
+             # ps_conf3
+             0::8,
+             # ps_ms
+             0::8,
+             # ps_canc
+             0::16,
+             # ps_thdl
+             0::16,
+             # ps_thdh
+             0::16
+           >> = update2 = to_binaries(new)
+
+    refute update1 == update2
+
+    assert [
+             <<0::8, 1::8, 0::8>>,
+             <<1::8, 0::8, 0::8>>,
+             <<2::8, 0::8, 0::8>>,
+             <<3::8, 32::8, 3::8>>,
+             <<4::8, 0::8, 0::8>>,
+             <<5::8, 0::8, 0::8>>,
+             <<6::8, 0::8, 0::8>>,
+             <<7::8, 0::8, 0::8>>
+           ] =
+             new
+             |> DeviceConfig.get_all_registers_for_i2c()
+  end
+
   test "check that all options do something" do
     # This test is gnarly and messy, but it is quite reassuring
     assert %DeviceConfig{registers: _empty} = blank = DeviceConfig.new()
