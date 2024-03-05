@@ -128,6 +128,11 @@ defmodule VCNL4040 do
     {:reply, state.proximity.latest_raw, state}
   end
 
+  def handle_call(:close, _from, %State{} = state) do
+    Hardware.close(state.bus_ref, state.interrupt_ref)
+    {:stop, :closed, :ok, state}
+  end
+
   def handle_call(:get_device_config, _from, %State{device_config: dc} = state) do
     {:reply, dc, state}
   end
@@ -235,6 +240,26 @@ defmodule VCNL4040 do
     GenServer.call(server, {:get_ambient_light, type})
   catch
     :exit, {error, _} -> {:error, error}
+  end
+
+  @doc """
+  Tell the driver to shut down open resources and exit.
+
+  This assumes you registered your GenServer with `name: VCNL4040`.
+
+  Returns :ok
+  """
+  @spec close() :: :ok
+  def close(), do: close(__MODULE__)
+
+  @doc """
+  Tell the driver to shut down open resources and exit.
+
+  Returns :ok
+  """
+  @spec close(GenServer.server()) :: :ok
+  def close(server) do
+    GenServer.call(server, :close)
   end
 
   @proximity_types [:filtered, :raw]

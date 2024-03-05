@@ -1,5 +1,8 @@
 defmodule VCNL4040.Hardware do
+  @moduledoc false
+
   alias Circuits.I2C
+  alias Circuits.GPIO
   @expected_device_addr 0x60
   @expected_device_id <<0x86, 0x01>>
   @device_interrupt_register <<0x0B>>
@@ -46,9 +49,9 @@ defmodule VCNL4040.Hardware do
   end
 
   def setup_interrupts(pin) do
-    case Circuits.GPIO.open(pin, :input, pullmode: :pullup) do
+    case GPIO.open(pin, :input, pullmode: :pullup) do
       {:ok, interrupt_ref} ->
-        case Circuits.GPIO.set_interrupts(interrupt_ref, :both) do
+        case GPIO.set_interrupts(interrupt_ref, :both) do
           :ok ->
             {:ok, interrupt_ref}
 
@@ -63,5 +66,21 @@ defmodule VCNL4040.Hardware do
 
   def clear_interrupts(bus_ref) do
     I2C.write_read!(bus_ref, @expected_device_addr, <<@device_interrupt_register>>, 2)
+  end
+
+  def close(bus_ref, interrupt_ref) do
+    try do
+      I2C.close(bus_ref)
+    rescue
+      _ ->
+        :ignore
+    end
+
+    try do
+      GPIO.close(interrupt_ref)
+    rescue
+      _ ->
+        :ignore
+    end
   end
 end
