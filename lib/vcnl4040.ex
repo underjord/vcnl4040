@@ -54,12 +54,21 @@ defmodule VCNL4040 do
           # TODO: Reimplement sensor_check_timer for blockages outside of library
 
           # Set up interrupt pin
-          state =
+          result =
             if state.interrupt_pin do
-              {:ok, interrupt_ref} = Hardware.setup_interrupts(state.interrupt_pin)
-              State.set_interrupt_ref(state, interrupt_ref)
+              case Hardware.setup_interrupts(state.interrupt_pin) do
+                {:ok, interrupt_ref} ->
+                  {:ok, State.set_interrupt_ref(state, interrupt_ref)}
+
+                {:error, reason} ->
+                  Logger.error(
+                    "Could not set up VCNL4040 interrupt pin (#{inspect(state.interrupt_pin)}): #{inspect(reason)}"
+                  )
+
+                  {:error, reason}
+              end
             else
-              state
+              {:ok, state}
             end
 
           if state.polling_sample_interval do
@@ -67,12 +76,19 @@ defmodule VCNL4040 do
             poll_me_maybe(state)
           end
 
-          {:ok, state}
+          case result do
+            {:ok, state} -> {:ok, state}
+            {:error, reason} -> {:error, {:open_interrupt_pin_failed, reason}}
+          end
         else
           {:error, :invalid_device}
         end
 
       {:error, reason} ->
+        Logger.error(
+          "Could not set up VCNL4040 I2C bus (#{inspect(state.i2c_bus)}): #{inspect(reason)}"
+        )
+
         {:error, {:open_failed, reason}}
     end
   end
