@@ -486,7 +486,7 @@ defmodule VCNL4040.DeviceConfig do
       end)
       |> IO.iodata_to_binary()
       |> tap(fn bin ->
-        bit_size(bin) |> IO.inspect(label: "bits")
+        bit_size(bin)
       end)
 
     <<address::8, payload::binary>>
