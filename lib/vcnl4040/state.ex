@@ -13,6 +13,7 @@ defmodule VCNL4040.State do
             device_config: nil,
             interrupt_ref: nil,
             polling_sample_interval: @default_sample_interval,
+            i2c_retries: 0,
             ambient_light: %{
               enable?: true,
               integration_time: 80,
@@ -59,6 +60,7 @@ defmodule VCNL4040.State do
       notify_pid: Keyword.get(options, :notify_pid, nil),
       device_config: Keyword.get(options, :device_config, base_device_config),
       interrupt_pin: interrupt_pin,
+      i2c_retries: Keyword.get(options, :i2c_retries, 0),
       polling_sample_interval: Keyword.get(options, :poll_interval, 1000),
       ambient_light: %{
         enabled?: Keyword.get(options, :als_enable?, true),

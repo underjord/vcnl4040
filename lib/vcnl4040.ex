@@ -39,7 +39,7 @@ defmodule VCNL4040 do
   def init(options) do
     state = State.from_options(options)
 
-    case Hardware.open(state.i2c_bus) do
+    case Hardware.open(state.i2c_bus, state.i2c_retries) do
       {:ok, bus_ref} ->
         state =
           state
