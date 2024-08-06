@@ -12,8 +12,16 @@ defmodule VCNL4040 do
   alias VCNL4040.State
   alias VCNL4040.Hardware
 
+  @alarm VCNL4040.SensorFailure
+
   @doc """
   Start the ambient light/proximity sensor driver
+
+  It will always start successfully. This is to mitigate cases where
+  intermittent electric problems or other outside issues would cause
+  failures that could in turn bring down your supervision tree.
+
+  It will primarily set alarms and log when it is having problems.
 
   Options:
   * `:name` - regular GenServer registration name, makes public API functions more convenient if only using one sensor.
@@ -39,6 +47,17 @@ defmodule VCNL4040 do
   def init(options) do
     state = State.from_options(options)
 
+    {:ok, state, {:continue, :setup}}
+  end
+
+  @impl GenServer
+  def handle_continue(:setup, state) do
+    {:noreply, try_start(state)}
+  end
+
+  defp try_start(state) do
+    :alarm_handler.clear_alarm(@alarm)
+
     case Hardware.open(state.i2c_bus, state.i2c_retries) do
       {:ok, bus_ref} ->
         state =
@@ -54,21 +73,25 @@ defmodule VCNL4040 do
           # TODO: Reimplement sensor_check_timer for blockages outside of library
 
           # Set up interrupt pin
-          result =
+          state =
             if state.interrupt_pin do
               case Hardware.setup_interrupts(state.interrupt_pin) do
                 {:ok, interrupt_ref} ->
-                  {:ok, State.set_interrupt_ref(state, interrupt_ref)}
+                  State.set_interrupt_ref(state, interrupt_ref)
 
                 {:error, reason} ->
+                  :alarm_handler.set_alarm({@alarm, [
+                    "Could not set up interrupt pin: #{inspect(reason)}"
+                  ]})
+
                   Logger.error(
                     "Could not set up VCNL4040 interrupt pin (#{inspect(state.interrupt_pin)}): #{inspect(reason)}"
                   )
 
-                  {:error, reason}
+                  state
               end
             else
-              {:ok, state}
+              state
             end
 
           if state.polling_sample_interval do
@@ -76,12 +99,9 @@ defmodule VCNL4040 do
             poll_me_maybe(state)
           end
 
-          case result do
-            {:ok, state} -> {:ok, state}
-            {:error, reason} -> {:error, {:open_interrupt_pin_failed, reason}}
-          end
+          state
         else
-          {:error, :invalid_device}
+          state
         end
 
       {:error, reason} ->
@@ -89,15 +109,27 @@ defmodule VCNL4040 do
           "Could not set up VCNL4040 I2C bus (#{inspect(state.i2c_bus)}): #{inspect(reason)}"
         )
 
-        {:error, {:open_failed, reason}}
+        :alarm_handler.set_alarm({@alarm, ["Could not set up I2C bus."]})
+
+        state
     end
+  rescue
+    e ->
+      :alarm_handler.set_alarm({@alarm, ["Failed to start sensor due to error: #{inspect(e)}"]})
+      Logger.error("Error caught when starting sensor: #{inspect(e)}")
+      state
   end
 
   @impl GenServer
+  def handle_info(:sample, %State{valid?: false} = state) do
+    state = try_start(state)
+    poll_me_maybe(state)
+    {:noreply, state}
+  end
+
   def handle_info(:sample, %State{valid?: true} = state) do
     state = sample_sensors(state)
     poll_me_maybe(state)
-
     {:noreply, state}
   end
 
@@ -364,7 +396,7 @@ defmodule VCNL4040 do
   # filling up on slow-down
   defp poll_me_maybe(%State{polling_sample_interval: nil}), do: :ok
 
-  defp poll_me_maybe(%State{polling_sample_interval: interval}) when interval > 0 do
+  defp poll_me_maybe(%State{valid?: true, polling_sample_interval: interval}) when interval > 0 do
     Process.send_after(self(), :sample, interval)
   end
 end
