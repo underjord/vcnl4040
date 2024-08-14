@@ -5,6 +5,8 @@ defmodule VCNL4040.State do
   @default_sample_interval 1000
   @default_buffer_size 9
 
+  require Logger
+
   defstruct i2c_bus: nil,
             notify_pid: nil,
             valid?: false,
@@ -20,7 +22,9 @@ defmodule VCNL4040.State do
               readings: nil,
               latest_raw: 0,
               latest_lux: 0,
-              latest_filtered: 0
+              latest_filtered: 0,
+              interrupt_tolerance: nil,
+              interrupt_base: nil
             },
             proximity: %{
               enable: true,
@@ -68,7 +72,9 @@ defmodule VCNL4040.State do
         readings: CircularBuffer.new(buffer_size),
         latest_raw: 0,
         latest_lux: 0,
-        latest_filtered: 0
+        latest_filtered: 0,
+        interrupt_tolerance: Keyword.get(options, :als_interrupt_tolerance, nil),
+        interrupt_base: nil
       },
       proximity: %{
         enabled?: Keyword.get(options, :ps_enable?, true),
@@ -123,6 +129,17 @@ defmodule VCNL4040.State do
             latest_filtered: filtered_value
         }
     }
+  end
+
+  def update_ambient_light_interrupt_base(
+        %S{ambient_light: %{interrupt_base: _base}} = state,
+        new_base
+      ) do
+    Logger.warning(
+      "Changing interrupt base to #{new_base} +/- #{state.ambient_light.interrupt_tolerance}"
+    )
+
+    %S{state | ambient_light: %{state.ambient_light | interrupt_base: new_base}}
   end
 
   def inspect_reading(%S{} = state) do

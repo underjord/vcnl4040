@@ -12,6 +12,9 @@ defmodule VCNL4040 do
   alias VCNL4040.State
   alias VCNL4040.Hardware
 
+  @threshold_max 65535
+  @threshold_min 0
+
   @doc """
   Start the ambient light/proximity sensor driver
 
@@ -28,6 +31,7 @@ defmodule VCNL4040 do
   * `:ps_enable?` - enable the Proximity Sensor immediately. Default: true (not hardware default)
   * `:ps_integration_time` - integration time for Proximity Sensor. Default: :t1 (weirdo time units, see data sheet?)
   * `:log_samples?` - always print sample collection to log. Default: false
+  * `:als_interrupt_tolerance` - enables automatic following of light level using interrupts. Default: nil
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(options \\ []) do
@@ -58,7 +62,8 @@ defmodule VCNL4040 do
             if state.interrupt_pin do
               case Hardware.setup_interrupts(state.interrupt_pin) do
                 {:ok, interrupt_ref} ->
-                  {:ok, State.set_interrupt_ref(state, interrupt_ref)}
+                  {:ok, State.set_interrupt_ref(state, interrupt_ref),
+                   {:continue, :setup_interrupt_base}}
 
                 {:error, reason} ->
                   Logger.error(
@@ -78,6 +83,7 @@ defmodule VCNL4040 do
 
           case result do
             {:ok, state} -> {:ok, state}
+            {:ok, state, continue} -> {:ok, state, continue}
             {:error, reason} -> {:error, {:open_interrupt_pin_failed, reason}}
           end
         else
@@ -94,6 +100,25 @@ defmodule VCNL4040 do
   end
 
   @impl GenServer
+  def terminate(_reason, state) do
+    Hardware.close(state.bus_ref, state.interrupt_ref)
+
+    :ok
+  end
+
+  @impl GenServer
+  def handle_continue(:setup_interrupt_base, state) do
+    if state.ambient_light.interrupt_tolerance do
+      Hardware.clear_interrupts(state.bus_ref)
+      raw_als_value = Hardware.read_ambient_light(state.bus_ref)
+
+      {:noreply, set_interrupt_base_value(state, raw_als_value)}
+    else
+      {:noreply, state}
+    end
+  end
+
+  @impl GenServer
   def handle_info(:sample, %State{valid?: true} = state) do
     state = sample_sensors(state)
     poll_me_maybe(state)
@@ -103,17 +128,27 @@ defmodule VCNL4040 do
 
   def handle_info(:sample, %State{} = state), do: {:noreply, state}
 
-  def handle_info({:circuits_gpio, pin, timestamp, value}, %State{valid?: true} = state) do
-    if pin == state.interrupt_pin do
-      process_interrupt(timestamp, value, state)
-    else
-      Logger.warning("Received unexpected pin message from GPIO pin #{pin}: #{inspect(value)}")
-
-      {:noreply, state}
-    end
+  # Goes low when an interrupt is triggered, match pin identifier
+  def handle_info(
+        {:circuits_gpio, pin, timestamp, 0},
+        %State{valid?: true, interrupt_pin: pin} = state
+      ) do
+    process_interrupt(timestamp, state)
   end
 
-  def handle_info(_message, %State{} = state), do: {:noreply, state}
+  # Goes high when reset to allow a new interrupt to happen, match pin identifer
+  def handle_info(
+        {:circuits_gpio, pin, _timestamp, 1},
+        %State{valid?: true, interrupt_pin: pin} = state
+      ) do
+    # No action, these are expected
+    {:noreply, state}
+  end
+
+  def handle_info(message, %State{} = state) do
+    Logger.warning("Unknown message: #{inspect(message)}")
+    {:noreply, state}
+  end
 
   @impl GenServer
   def handle_call(:sensor_present?, _from, %State{} = state) do
@@ -136,12 +171,20 @@ defmodule VCNL4040 do
     {:reply, state.ambient_light.latest_raw, state}
   end
 
+  def handle_call({:get_ambient_light, :direct}, _from, %State{} = state) do
+    {:reply, Hardware.read_ambient_light(state.bus_ref), state}
+  end
+
   def handle_call({:get_proximity, :filtered}, _from, %State{} = state) do
     {:reply, state.proximity.latest_filtered, state}
   end
 
   def handle_call({:get_proximity, :raw}, _from, %State{} = state) do
     {:reply, state.proximity.latest_raw, state}
+  end
+
+  def handle_call({:get_proximity, :direct}, _from, %State{} = state) do
+    {:reply, Hardware.read_proximity(state.bus_ref), state}
   end
 
   def handle_call(:close, _from, %State{} = state) do
@@ -161,9 +204,13 @@ defmodule VCNL4040 do
     {:reply, :ok, %State{state | device_config: device_config}}
   end
 
-  defp process_interrupt(_timestamp, _value, %State{} = state) do
+  defp process_interrupt(_timestamp, %State{} = state) do
+    state =
+      state
+      |> sample_sensors()
+      |> adjust_ambient_light_tolerances()
+
     Hardware.clear_interrupts(state.bus_ref)
-    state = sample_sensors(state)
 
     {:noreply, state}
   end
@@ -220,7 +267,7 @@ defmodule VCNL4040 do
       false
   end
 
-  @light_types [:filtered, :lux, :raw]
+  @light_types [:filtered, :lux, :raw, :direct]
   @doc """
   Returns the current reading from the ambient light sensor
 
@@ -234,7 +281,7 @@ defmodule VCNL4040 do
 
   Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
   """
-  @spec get_ambient_light(:filtered | :lux | :raw) ::
+  @spec get_ambient_light(:filtered | :lux | :raw | :direct) ::
           number() | {:error, :no_sensor | :timeout | :noproc}
   def get_ambient_light(type), do: get_ambient_light(__MODULE__, type)
 
@@ -278,7 +325,7 @@ defmodule VCNL4040 do
     GenServer.call(server, :close)
   end
 
-  @proximity_types [:filtered, :raw]
+  @proximity_types [:filtered, :raw, :direct]
   @doc """
   Returns the current reading from the ambient light sensor.
 
@@ -366,5 +413,51 @@ defmodule VCNL4040 do
 
   defp poll_me_maybe(%State{polling_sample_interval: interval}) when interval > 0 do
     Process.send_after(self(), :sample, interval)
+  end
+
+  defp adjust_ambient_light_tolerances(
+         %State{
+           ambient_light: %{
+             latest_raw: raw,
+             interrupt_base: base,
+             interrupt_tolerance: tolerance
+           }
+         } = state
+       ) do
+    if raw > base + tolerance or raw < base - tolerance do
+      set_interrupt_base_value(state, raw)
+    else
+      state
+    end
+  end
+
+  defp set_interrupt_base_value(
+         %State{ambient_light: %{interrupt_tolerance: tolerance}} = state,
+         raw
+       ) do
+    state = State.update_ambient_light_interrupt_base(state, raw)
+
+    device_config =
+      state.device_config
+      |> DeviceConfig.update!(
+        :als_thdh,
+        clamp_threshold(raw + tolerance)
+      )
+      |> DeviceConfig.update!(
+        :als_thdl,
+        clamp_threshold(raw - tolerance)
+      )
+
+    device_config
+    |> DeviceConfig.get_all_registers_for_i2c()
+    |> Hardware.apply_device_config(state.bus_ref)
+
+    %{state | device_config: device_config}
+  end
+
+  defp clamp_threshold(threshhold) do
+    threshhold
+    |> min(@threshold_max)
+    |> max(@threshold_min)
   end
 end
