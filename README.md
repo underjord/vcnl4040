@@ -42,6 +42,39 @@ See `VCNL4040.start_link/1` for more detailed documentation on start options.
 
 See `VCNL4040.DeviceConfig` for more detailed configuration of the hardware.
 
+## Dynamic interrupt threshold
+
+This tries to offload all the work to the device using the built-in interrupt
+features. It requires the interrupt pin to be hooked up.
+
+When light changes beyond a certain tolerance it will trigger a sample that
+and then it will adapt the thresholds. This has been reliable for me so far in
+testing but consider it somewhat experimental.
+
+Exampe:
+
+```elixir
+      # This enables interrupts, sets some bogus thresholds and sets 160ms
+      # integration time, plenty of options if you read DeviceConfig
+      device_config = VCNL4040.DeviceConfig.als_with_interrupts(1000, 1600, 160)
+      {:ok, pid} =
+        VCNL4040.start_link(
+          i2c_bus: "i2c-1",
+          notify_pid: self(),
+          # Check your pin :)
+          interrupt_pin: 6,
+          #log_samples?: true,
+          # Turn off polling entirely, because that's cool
+          poll_interval: nil,
+          device_config: device_config,
+          als_integration_time: 160,
+          # for light in a range between 0-65335 or so
+          als_interrupt_tolerance: 500,
+          name: VCNL4040
+        )
+
+```
+
 ## Simulated device
 
 There is a simulated device for the VCNL4040 in [circuits_sim](https://github.com/elixir-circuits/circuits_sim) at some stage of completion. At the time of writing it does not have GPIO interrupt support.
