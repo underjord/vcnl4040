@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.6
+
+Removed unintentional warning that would make a lot of noise in logs.
+
 ## v0.1.5
 
 Add termination callback to clean up GPIO and I2C references held via Circuits when GenServer closes. They could easily get jammed.
