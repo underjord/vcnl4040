@@ -135,10 +135,6 @@ defmodule VCNL4040.State do
         %S{ambient_light: %{interrupt_base: _base}} = state,
         new_base
       ) do
-    Logger.warning(
-      "Changing interrupt base to #{new_base} +/- #{state.ambient_light.interrupt_tolerance}"
-    )
-
     %S{state | ambient_light: %{state.ambient_light | interrupt_base: new_base}}
   end
 
