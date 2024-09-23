@@ -412,7 +412,8 @@ defmodule VCNL4040 do
   defp poll_me_maybe(%State{polling_sample_interval: nil}), do: :ok
 
   defp poll_me_maybe(%State{polling_sample_interval: interval}) when interval > 0 do
-    Process.send_after(self(), :sample, interval)
+    _timer_ref = Process.send_after(self(), :sample, interval)
+    :ok
   end
 
   defp adjust_ambient_light_tolerances(
