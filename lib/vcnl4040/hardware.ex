@@ -16,7 +16,7 @@ defmodule VCNL4040.Hardware do
     I2C.open(i2c_bus, retries: retries)
   end
 
-  def is_valid?(bus_ref) do
+  def valid?(bus_ref) do
     case I2C.write_read(bus_ref, @expected_device_addr, @device_id_register, 2) do
       {:ok, dev_id} ->
         dev_id == @expected_device_id

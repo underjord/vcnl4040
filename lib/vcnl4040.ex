@@ -48,7 +48,7 @@ defmodule VCNL4040 do
         state =
           state
           |> State.set_bus_ref(bus_ref)
-          |> State.set_valid(Hardware.is_valid?(bus_ref))
+          |> State.set_valid(Hardware.valid?(bus_ref))
 
         if state.valid? do
           state.device_config
