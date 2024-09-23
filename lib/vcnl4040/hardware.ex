@@ -96,7 +96,7 @@ defmodule VCNL4040.Hardware do
   end
 
   def setup_interrupts(pin) do
-    case GPIO.open(pin, :input, pullmode: :pullup) do
+    case GPIO.open(pin, :input, pull_mode: :pullup) do
       {:ok, interrupt_ref} ->
         case GPIO.set_interrupts(interrupt_ref, :both) do
           :ok ->
