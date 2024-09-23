@@ -136,7 +136,7 @@ defmodule VCNL4040 do
     process_interrupt(timestamp, state)
   end
 
-  # Goes high when reset to allow a new interrupt to happen, match pin identifer
+  # Goes high when reset to allow a new interrupt to happen, match pin identifier
   def handle_info(
         {:circuits_gpio, pin, _timestamp, 1},
         %State{valid?: true, interrupt_pin: pin} = state
@@ -331,7 +331,7 @@ defmodule VCNL4040 do
 
   This assumes you registered your GenServer with `name: VCNL4040`.
 
-  The `type` argumnet can be:
+  The `type` argument can be:
 
   * `:filtered` - converted to lux and the median of the samples in the buffer, avoiding outliers.
   * `:raw` - latest read, straight from the sensor. If you have some weird use for it.
@@ -343,7 +343,7 @@ defmodule VCNL4040 do
   @doc """
   Returns the current reading from the ambient light sensor.
 
-  The `type` argumnet can be:
+  The `type` argument can be:
 
   * `:filtered` - converted to lux and the median of the samples in the buffer, avoiding outliers.
   * `:raw` - latest read, straight from the sensor. If you have some weird use for it.
@@ -455,8 +455,8 @@ defmodule VCNL4040 do
     %{state | device_config: device_config}
   end
 
-  defp clamp_threshold(threshhold) do
-    threshhold
+  defp clamp_threshold(threshold) do
+    threshold
     |> min(@threshold_max)
     |> max(@threshold_min)
   end

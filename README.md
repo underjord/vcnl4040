@@ -51,7 +51,7 @@ When light changes beyond a certain tolerance it will trigger a sample that
 and then it will adapt the thresholds. This has been reliable for me so far in
 testing but consider it somewhat experimental.
 
-Exampe:
+Example:
 
 ```elixir
       # This enables interrupts, sets some bogus thresholds and sets 160ms
