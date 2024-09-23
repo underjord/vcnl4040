@@ -296,7 +296,7 @@ defmodule VCNL4040 do
 
   Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
   """
-  @spec get_ambient_light(GenServer.server(), :filtered | :lux | :raw) ::
+  @spec get_ambient_light(GenServer.server(), :filtered | :lux | :raw | :direct) ::
           number() | {:error, :no_sensor | :timeout | :noproc}
   def get_ambient_light(server, type)
       when is_server(server) and type in @light_types do
