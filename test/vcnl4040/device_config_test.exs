@@ -249,7 +249,6 @@ defmodule VCNL4040.DeviceConfigTest do
           end)
 
         [min, max] when is_integer(min) and is_integer(max) ->
-          # TODO: test uint16le
           assert true
           seen
 

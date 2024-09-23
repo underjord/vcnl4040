@@ -23,7 +23,8 @@ defmodule VCNL4040.MixProject do
         name: :vcnl4040,
         licenses: ["MIT"],
         links: %{"GitHub" => "https://github.com/underjord/vcnl4040"}
-      ]
+      ],
+      aliases: aliases()
     ]
   end
 
@@ -37,13 +38,26 @@ defmodule VCNL4040.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
+  defp aliases() do
+    [
+      check: [
+        "compile --warnings-as-errors --force",
+        "format --check-formatted",
+        "credo",
+        "dialyzer"
+      ]
+    ]
+  end
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:circuits_i2c, "~> 2.0"},
       {:circuits_gpio, "~> 2.0"},
       {:circular_buffer, "~> 0.4.1"},
-      {:ex_doc, "~> 0.31", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.31", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: :dev},
+      {:dialyxir, "~> 1.4", only: :dev}
     ]
   end
 end

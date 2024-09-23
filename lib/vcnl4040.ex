@@ -12,7 +12,7 @@ defmodule VCNL4040 do
   alias VCNL4040.State
   alias VCNL4040.Hardware
 
-  @threshold_max 65535
+  @threshold_max 65_535
   @threshold_min 0
 
   @doc """
@@ -54,8 +54,6 @@ defmodule VCNL4040 do
           state.device_config
           |> DeviceConfig.get_all_registers_for_i2c()
           |> Hardware.apply_device_config(bus_ref)
-
-          # TODO: Reimplement sensor_check_timer for blockages outside of library
 
           # Set up interrupt pin
           result =
@@ -388,7 +386,7 @@ defmodule VCNL4040 do
 
   Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
   """
-  @spec set_device_config(%DeviceConfig{}) :: :ok | {:error, :no_sensor | :timeout | :noproc}
+  @spec set_device_config(DeviceConfig.t()) :: :ok | {:error, :no_sensor | :timeout | :noproc}
   def set_device_config(%DeviceConfig{} = device_config),
     do: set_device_config(__MODULE__, device_config)
 
@@ -397,7 +395,7 @@ defmodule VCNL4040 do
 
   Returns `:timeout` or `:noproc` if the GenServer times out or isn't running.
   """
-  @spec set_device_config(GenServers.server(), %DeviceConfig{}) ::
+  @spec set_device_config(GenServer.server(), DeviceConfig.t()) ::
           :ok | {:error, :no_sensor | :timeout | :noproc}
   def set_device_config(server, %DeviceConfig{} = device_config)
       when is_server(server) do

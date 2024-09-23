@@ -45,7 +45,7 @@ defmodule VCNL4040.State do
   alias VCNL4040.State, as: S
 
   def max_lux(%S{ambient_light: %{integration_time: it}}) do
-    65536 * @als_integration_to_lux_step[it]
+    65_536 * @als_integration_to_lux_step[it]
   end
 
   def als_sample_to_lux(%S{ambient_light: %{integration_time: it}}, sample) do

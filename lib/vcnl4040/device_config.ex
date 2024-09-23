@@ -28,6 +28,11 @@ defmodule VCNL4040.DeviceConfig do
   """
   defstruct registers: %{}, config: %{}
 
+  @type t() :: %__MODULE__{
+          registers: map(),
+          config: map()
+        }
+
   @registers %{
     # label: {address, byte offset}
     als_conf: {0x00, 0},
@@ -264,7 +269,7 @@ defmodule VCNL4040.DeviceConfig do
   }
 
   @reserved_zero <<0::1>>
-  @threshold_max 65535
+  @threshold_max 65_535
   @threshold_min 0
 
   alias __MODULE__, as: C
@@ -520,7 +525,7 @@ defmodule VCNL4040.DeviceConfig do
           }
           | [{atom(), term()}],
           map() | nil
-        ) :: {:als_conf, binary()}
+        ) :: {:als_conf, binary(), map()}
   def als_conf(kv \\ [], d \\ nil) do
     cfg =
       d ||
@@ -549,7 +554,7 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and value.
   """
-  @spec als_threshold_high(high :: non_neg_integer()) :: binary()
+  @spec als_threshold_high(high :: non_neg_integer()) :: {:als_thdh, binary(), non_neg_integer()}
   def als_threshold_high(high \\ 0) when is_threshold(high), do: als_thdh(high)
 
   @doc """
@@ -557,7 +562,8 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and value.
   """
-  @spec als_thdh(high :: non_neg_integer(), default :: non_neg_integer() | nil) :: binary()
+  @spec als_thdh(high :: non_neg_integer(), default :: non_neg_integer() | nil) ::
+          {:als_thdh, binary(), non_neg_integer()}
   def als_thdh(high \\ 0, _ \\ nil) when is_threshold(high) do
     {:als_thdh, <<high::little-16>>, high}
   end
@@ -569,7 +575,7 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and value.
   """
-  @spec als_threshold_low(low :: non_neg_integer()) :: binary()
+  @spec als_threshold_low(low :: non_neg_integer()) :: {:als_thdl, binary(), non_neg_integer()}
   def als_threshold_low(low \\ 0) when is_threshold(low), do: als_thdl(low)
 
   @doc """
@@ -577,7 +583,8 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and value.
   """
-  @spec als_thdh(high :: non_neg_integer(), default :: non_neg_integer() | nil) :: binary()
+  @spec als_thdl(high :: non_neg_integer(), default :: non_neg_integer() | nil) ::
+          {:als_thdl, binary(), non_neg_integer()}
   def als_thdl(low \\ 0, _ \\ nil) when is_threshold(low) do
     {:als_thdl, <<low::little-16>>, low}
   end
@@ -604,7 +611,7 @@ defmodule VCNL4040.DeviceConfig do
           }
           | [{atom(), term()}],
           map() | nil
-        ) :: {:ps_conf1, binary()}
+        ) :: {:ps_conf1, binary(), map()}
   def ps_conf1(kv \\ [], d \\ nil) do
     cfg =
       d ||
@@ -634,9 +641,9 @@ defmodule VCNL4040.DeviceConfig do
             ps_hd: 12 | 16,
             ps_int: :disable | :close | :away | :both
           }
-          | [{}],
+          | [{atom(), term()}],
           map() | nil
-        ) :: {:ps_conf2, binary()}
+        ) :: {:ps_conf2, binary(), map()}
   def ps_conf2(kv \\ [], d \\ nil) do
     cfg =
       d ||
@@ -677,7 +684,7 @@ defmodule VCNL4040.DeviceConfig do
           }
           | [{atom(), term()}],
           map() | nil
-        ) :: {:ps_conf3, binary()}
+        ) :: {:ps_conf3, binary(), map()}
   def ps_conf3(kv \\ [], d \\ nil) do
     cfg =
       d ||
@@ -716,7 +723,7 @@ defmodule VCNL4040.DeviceConfig do
           }
           | [{atom(), term()}],
           map() | nil
-        ) :: {:ps_ms, binary()}
+        ) :: {:ps_ms, binary(), map()}
   def ps_ms(kv \\ [], d \\ nil) do
     cfg =
       d ||
