@@ -549,8 +549,8 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and value.
   """
-  @spec als_threshhold_high(high :: non_neg_integer()) :: binary()
-  def als_threshhold_high(high \\ 0) when is_threshold(high), do: als_thdh(high)
+  @spec als_threshold_high(high :: non_neg_integer()) :: binary()
+  def als_threshold_high(high \\ 0) when is_threshold(high), do: als_thdh(high)
 
   @doc """
   Sets high threshold for Ambient Light Sensor interrupt.
@@ -569,8 +569,8 @@ defmodule VCNL4040.DeviceConfig do
 
   Returns a tuple tagged by field with binary and value.
   """
-  @spec als_threshhold_high(high :: non_neg_integer()) :: binary()
-  def als_threshhold_low(low \\ 0) when is_threshold(low), do: als_thdl(low)
+  @spec als_threshold_low(low :: non_neg_integer()) :: binary()
+  def als_threshold_low(low \\ 0) when is_threshold(low), do: als_thdl(low)
 
   @doc """
   Sets low threshold for Ambient Light Sensor interrupt.
