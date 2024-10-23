@@ -49,7 +49,7 @@ defmodule VCNL4040.State do
   end
 
   def als_sample_to_lux(%S{ambient_light: %{integration_time: it}}, sample) do
-    round(@als_integration_to_lux_step[it] * sample)
+    @als_integration_to_lux_step[it] * sample
   end
 
   def from_options(options) do
@@ -71,8 +71,8 @@ defmodule VCNL4040.State do
         integration_time: Keyword.get(options, :als_integration_time, 80),
         readings: CircularBuffer.new(buffer_size),
         latest_raw: 0,
-        latest_lux: 0,
-        latest_filtered: 0,
+        latest_lux: 0.0,
+        latest_filtered: 0.0,
         interrupt_tolerance: Keyword.get(options, :als_interrupt_tolerance, nil),
         interrupt_base: nil
       },
