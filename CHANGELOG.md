@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.7
+
+Remove rounding of lux values to provide significantly more detailed precision. Expect floats.
+
 ## v0.1.6
 
 Removed unintentional warning that would make a lot of noise in logs.
