@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.8
+
+Loosen version constraint on circular_buffer to allow 1.x.
+
 ## v0.1.7
 
 Remove rounding of lux values to provide significantly more detailed precision. Expect floats.
