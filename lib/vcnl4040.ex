@@ -12,8 +12,10 @@ defmodule VCNL4040 do
   alias VCNL4040.State
   alias VCNL4040.Hardware
 
-  @threshold_max 65_535
-  @threshold_min 0
+  @als_threshold_max 65_535
+  @als_threshold_min 0
+  @ps_threshold_max 65_535
+  @ps_threshold_min 0
 
   @doc """
   Start the ambient light/proximity sensor driver
@@ -32,6 +34,7 @@ defmodule VCNL4040 do
   * `:ps_integration_time` - integration time for Proximity Sensor. Default: :t1 (weirdo time units, see data sheet?)
   * `:log_samples?` - always print sample collection to log. Default: false
   * `:als_interrupt_tolerance` - enables automatic following of light level using interrupts. Default: nil
+  * `:ps_interrupt_tolerance` - enables automatic following of proximity level using interrupts. Default: nil
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(options \\ []) do
@@ -106,14 +109,29 @@ defmodule VCNL4040 do
 
   @impl GenServer
   def handle_continue(:setup_interrupt_base, state) do
-    if state.ambient_light.interrupt_tolerance do
+    if state.ambient_light.interrupt_tolerance || state.proximity.interrupt_tolerance do
       Hardware.clear_interrupts(state.bus_ref)
-      raw_als_value = Hardware.read_ambient_light(state.bus_ref)
-
-      {:noreply, set_interrupt_base_value(state, raw_als_value)}
-    else
-      {:noreply, state}
     end
+
+    state =
+      if state.ambient_light.interrupt_tolerance do
+        raw_als_value = Hardware.read_ambient_light(state.bus_ref)
+
+        set_interrupt_als_base_value(state, raw_als_value)
+      else
+        state
+      end
+
+    state =
+      if state.proximity.interrupt_tolerance do
+        raw_ps_value = Hardware.read_proximity(state.bus_ref)
+
+        set_interrupt_ps_base_value(state, raw_ps_value)
+      else
+        state
+      end
+
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -207,6 +225,7 @@ defmodule VCNL4040 do
       state
       |> sample_sensors()
       |> adjust_ambient_light_tolerances()
+      |> adjust_proximity_tolerances()
 
     Hardware.clear_interrupts(state.bus_ref)
 
@@ -424,13 +443,29 @@ defmodule VCNL4040 do
          } = state
        ) do
     if raw > base + tolerance or raw < base - tolerance do
-      set_interrupt_base_value(state, raw)
+      set_interrupt_als_base_value(state, raw)
     else
       state
     end
   end
 
-  defp set_interrupt_base_value(
+  defp adjust_proximity_tolerances(
+         %State{
+           proximity: %{
+             latest_raw: raw,
+             interrupt_base: base,
+             interrupt_tolerance: tolerance
+           }
+         } = state
+       ) do
+    if raw > base + tolerance or raw < base - tolerance do
+      set_interrupt_ps_base_value(state, raw)
+    else
+      state
+    end
+  end
+
+  defp set_interrupt_als_base_value(
          %State{ambient_light: %{interrupt_tolerance: tolerance}} = state,
          raw
        ) do
@@ -440,11 +475,11 @@ defmodule VCNL4040 do
       state.device_config
       |> DeviceConfig.update!(
         :als_thdh,
-        clamp_threshold(raw + tolerance)
+        clamp_als_threshold(raw + tolerance)
       )
       |> DeviceConfig.update!(
         :als_thdl,
-        clamp_threshold(raw - tolerance)
+        clamp_als_threshold(raw - tolerance)
       )
 
     device_config
@@ -454,9 +489,39 @@ defmodule VCNL4040 do
     %{state | device_config: device_config}
   end
 
-  defp clamp_threshold(threshold) do
+  defp set_interrupt_ps_base_value(
+         %State{proximity: %{interrupt_tolerance: tolerance}} = state,
+         raw
+       ) do
+    state = State.update_proximity_interrupt_base(state, raw)
+
+    device_config =
+      state.device_config
+      |> DeviceConfig.update!(
+        :ps_thdh,
+        clamp_ps_threshold(raw + tolerance)
+      )
+      |> DeviceConfig.update!(
+        :ps_thdl,
+        clamp_ps_threshold(raw - tolerance)
+      )
+
+    device_config
+    |> DeviceConfig.get_all_registers_for_i2c()
+    |> Hardware.apply_device_config(state.bus_ref)
+
+    %{state | device_config: device_config}
+  end
+
+  defp clamp_als_threshold(threshold) do
     threshold
-    |> min(@threshold_max)
-    |> max(@threshold_min)
+    |> min(@als_threshold_max)
+    |> max(@als_threshold_min)
+  end
+
+  defp clamp_ps_threshold(threshold) do
+    threshold
+    |> min(@ps_threshold_max)
+    |> max(@ps_threshold_min)
   end
 end

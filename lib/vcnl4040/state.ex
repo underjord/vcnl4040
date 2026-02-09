@@ -17,7 +17,7 @@ defmodule VCNL4040.State do
             polling_sample_interval: @default_sample_interval,
             i2c_retries: 0,
             ambient_light: %{
-              enable?: true,
+              enabled?: true,
               integration_time: 80,
               readings: nil,
               latest_raw: 0,
@@ -27,11 +27,13 @@ defmodule VCNL4040.State do
               interrupt_base: nil
             },
             proximity: %{
-              enable: true,
+              enabled?: true,
               integration_time: :t1,
               readings: nil,
               latest_raw: 0,
-              latest_filtered: 0
+              latest_filtered: 0,
+              interrupt_tolerance: nil,
+              interrupt_base: nil
             },
             log_samples?: false
 
@@ -81,7 +83,9 @@ defmodule VCNL4040.State do
         integration_time: Keyword.get(options, :ps_integration_time, :t1),
         readings: CircularBuffer.new(buffer_size),
         latest_raw: 0,
-        latest_filtered: 0
+        latest_filtered: 0,
+        interrupt_tolerance: Keyword.get(options, :ps_interrupt_tolerance, nil),
+        interrupt_base: nil
       },
       log_samples?: Keyword.get(options, :log_samples?, false)
     }
@@ -136,6 +140,13 @@ defmodule VCNL4040.State do
         new_base
       ) do
     %S{state | ambient_light: %{state.ambient_light | interrupt_base: new_base}}
+  end
+
+  def update_proximity_interrupt_base(
+        %S{proximity: %{interrupt_base: _base}} = state,
+        new_base
+      ) do
+    %S{state | proximity: %{state.proximity| interrupt_base: new_base}}
   end
 
   def inspect_reading(%S{} = state) do
